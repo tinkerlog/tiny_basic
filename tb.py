@@ -1,10 +1,14 @@
 #!/usr/bin/python3
 
 import string
+import math
+
+debug = False
 
 vars = {}
 stack = []
 
+ANY = 'any'
 REM = 'REM'
 PRINT = 'PRINT'
 IF = 'IF'
@@ -21,8 +25,12 @@ MUL = '*'
 DIV = '/'
 ID = 'ID'
 TAB = 'TAB'
+SQR = 'SQR'
+INT = 'INT'
 STRING = 'STRING'
 NUMBER = 'NUMBER'
+FLOAT = 'FLOAT'
+INTEGER = 'INTEGER'
 COMMA = ','
 SEMICOLON = ';'
 LT = '<'
@@ -35,9 +43,13 @@ LPAREN = '('
 RPAREN = ')'
 EOL = 'EOL'
 
+def log(msg):
+    if debug:
+        print(msg)
+
 class Token(object):
 
-    def __init__(self, type, value):
+    def __init__(self, type, value = None):
         self.type = type
         self.value = value
 
@@ -49,17 +61,19 @@ class Token(object):
 
 
 RESERVED_KEYWORDS = {
-    'REM':      Token('REM', 'REM'),
-    'PRINT':    Token('PRINT', 'PRINT'),
-    'IF':       Token('IF', 'IF'),
-    'THEN':     Token('THEN', 'THEN'),
-    'GOTO':     Token('GOTO', 'GOTO'),
-    'INPUT':    Token('INPUT', 'INPUT'),
-    'LET':      Token('LET', 'LET'),
-    'GOSUB':    Token('GOSUB', 'GOSUB'),
-    'RETURN':   Token('RETURN', 'RETURN'),
-    'TAB':      Token('TAB', 'TAB'),
-    'END':      Token('END', 'END')
+    REM:      Token(REM),
+    PRINT:    Token(PRINT),
+    IF:       Token(IF),
+    THEN:     Token(THEN),
+    GOTO:     Token(GOTO),
+    INPUT:    Token(INPUT),
+    LET:      Token(LET),
+    GOSUB:    Token(GOSUB),
+    RETURN:   Token(RETURN),
+    TAB:      Token(TAB),
+    SQR:      Token(SQR),
+    INT:      Token(INT),
+    END:      Token(END)
 }
 
 
@@ -88,27 +102,27 @@ class Lexer(object):
             self.current_char = None
         else:
             self.current_char = self.text[self.pos]
-        # print("  char: {}, pos: {}".format(self.current_char, self.pos))
 
     def skip_whitespace(self):
         while self.current_char != None and self.current_char.isspace():
             self.advance()
 
     def skip_line_comment(self):
-        # result = ''
         while self.current_char is not None:
-            # result += self.current_char
             self.advance()
-        # token = Token(STRING, result)
-        # return token
 
     def number(self):
-        result = ''
+        result = ''        
         while (self.current_char is not None
-                   and (self.current_char.isdigit() or self.current_char == '.')):
+                   and (self.current_char.isdigit() or self.current_char in ".E-")):
+            if self.current_char == '-' and result[-1] != 'E':
+                break
             result += self.current_char
             self.advance()
-        return Token(NUMBER, int(result))
+        try:
+            return Token(NUMBER, int(result))
+        except:
+            return Token(NUMBER, float(result))        
 
     def _id(self):
         result = ''
@@ -142,7 +156,6 @@ class Lexer(object):
             elif self.current_char == '"':
                 token = self.string()
             elif self.current_char.isdigit():
-                # token = Token(INTEGER, self.integer(), self.line_number)
                 token = self.number()
             elif self.current_char == '=':
                 self.advance()
@@ -213,8 +226,6 @@ class LetStatement(AST):
         self.expr = expr
 
     def visit(self):
-        # result = self.expr.visit()
-        # print("-------- result: {}".format(result))
         vars[self.var.name] = self.expr.visit()        
 
     def __str__(self):
@@ -240,8 +251,12 @@ class PrintStatement(AST):
                     print(" " * (next_pos - pos), end = "")
                     pos = next_pos
             else:
-                s = expr.visit()
-                pos += len(s)
+                res = expr.visit()
+                if isinstance(res, float):
+                    s = "{:.2f}".format(res)
+                else:
+                    s = res
+                pos += len(str(s))
                 print(s, end = "")
         print("")
 
@@ -297,7 +312,8 @@ class GosubStatement(AST):
         self.line_number = line_number
 
     def visit(self):
-        stack.push(self.line_number)
+        stack.append(self.line_number)
+        return self.expr.visit()
 
     def __str__(self):
         return "GOSUB {}".format(self.expr)
@@ -308,7 +324,7 @@ class ReturnStatement(AST):
         self.line_number = line_number
 
     def visit(self):
-        return stack.pop(0)
+        return stack.pop()
 
     def __str__(self):
         return "RETURN"
@@ -338,7 +354,7 @@ class Var(AST):
         self.name = name
 
     def visit(self):
-        return vars[self.name]
+        return vars.get(self.name, 0)
 
     def __str__(self):
         return "Var " + self.name
@@ -365,6 +381,7 @@ class String(AST):
     def __str__(self):
         return self.value
 
+
 class Tab(AST):
     def __init__(self, expr):
         self.expr = expr
@@ -374,6 +391,24 @@ class Tab(AST):
 
     def __str__(self):
         return "TAB({})".format(str(self.expr))
+
+
+class Function(AST):
+    def __init__(self, name, expr):
+        self.name = name
+        self.expr = expr
+
+    def visit(self):
+        value = self.expr.visit()
+        if self.name == SQR:
+            return math.sqrt(value)
+        elif self.name == INT:
+            return int(value)
+        else: 
+            raise Exception("unknow function {}".format(self.name))
+
+    def __str__(self):
+        return "FUNC {} ( {} )".format(self.name, str(self.expr))
 
 
 class UnOp(AST):
@@ -386,6 +421,9 @@ class UnOp(AST):
             return self.factor.visit()
         elif self.op.type == MINUS:
             return -self.factor.visit()
+    
+    def __str__(self):
+        return "UnOp {} {}".format(self.op, self.factor)
 
 
 class BinOp(AST):
@@ -434,14 +472,13 @@ class Parser(object):
 
     def eat(self, type):
         # print("  eating {}".format(type))
-        if type == self.current_token.type or type == None:
+        if type == self.current_token.type or type == ANY:
             if len(self.line) > 0:
                 self.current_token = self.line.pop(0)
             else:
                 self.current_token == None
         else:
             raise Exception("expected {} but got {}".format(type, self.current_token.type))
-        # print("current: {}".format(self.current_token))        
 
     def parse_var(self):
         name = self.current_token.value
@@ -452,21 +489,29 @@ class Parser(object):
             raise Exception("var name {} not allowed".format(name))
         return Var(name)
 
+    def parse_function(self):
+        func_name = self.current_token.type
+        self.eat(ANY)
+        self.eat(LPAREN)
+        expr = self.parse_expr()
+        self.eat(RPAREN)
+        return Function(func_name, expr)
+
     def parse_factor(self):
-        # print("  parse factor")
         token = self.current_token
         if token.type == PLUS:
             self.eat(PLUS)
-            return UnOp(token, self.factor())
+            return UnOp(token, self.parse_factor())
         elif token.type == MINUS:
             self.eat(MINUS)
-            return UnOp(token, self.factor()) 
-        elif token.type == NUMBER:
+            return UnOp(token, self.parse_factor()) 
+        elif token.type == NUMBER: # TODO needed?
             self.eat(NUMBER)            
             return Num(token)
         elif token.type == ID:
-            self.eat(ID)
-            return Var(token.value)
+            return self.parse_var()            
+        elif token.type in (SQR, INT):
+            return self.parse_function()
         elif token.type == LPAREN:
             self.eat(LPAREN)
             node = self.parse_expr()
@@ -477,30 +522,25 @@ class Parser(object):
     # term ::=
     #   factor ((* | /) factor)*
     def parse_term(self):        
-        # print("  parse term")
         node = self.parse_factor()
         while self.current_token.type in (MUL, DIV):
             token = self.current_token
-            self.eat(None)
+            self.eat(ANY)
             node = BinOp(left=node, op=token, right=self.parse_factor())
-        # logging.debug("return term node: " + str(node))
         return node    
 
     # expr ::=
     #   term ((+ | -) term)*
     def parse_expr(self):
-        # print("  parse expr")
         node = self.parse_term()
-        # print("  current: {}".format(self.current_token))
         while self.current_token.type in (PLUS, MINUS):
             token = self.current_token
-            self.eat(None)
+            self.eat(ANY)
             node = BinOp(left=node, op=token, right=self.parse_term())
         return node
 
 
     def parse_TAB(self):
-        print("TAB")
         self.eat(TAB)
         self.eat(LPAREN)
         expr = self.parse_expr()
@@ -509,7 +549,7 @@ class Parser(object):
 
 
     def parse_expr_or_string(self):  
-        print("c: {}".format(self.current_token))
+        log("  parse expr or string, current: {}".format(self.current_token))
         if self.current_token.type == TAB:
             node = self.parse_TAB()      
         elif self.current_token.type == STRING:
@@ -517,18 +557,18 @@ class Parser(object):
             self.eat(STRING)
         else:
             node = self.parse_expr()
-        print("parse exp str: {}".format(node))
+        log("  parsed expr str: {}".format(node))
         return node
 
     def parse_expr_list(self):
+        log("  parse expr_list")
         expr_list = []
-        print("current: {}".format(self.current_token))
         expr_list.append(self.parse_expr_or_string())
         while self.current_token.type in (COMMA, SEMICOLON):
             expr_list.append(self.current_token)
-            self.eat(None)
+            self.eat(ANY)
             expr_list.append(self.parse_expr_or_string())
-        print("expr list: {}".format(expr_list))
+        log("  parsed expr list: {}".format(expr_list))
         return expr_list
 
     def parse_var_list(self):
@@ -559,7 +599,7 @@ class Parser(object):
         left = self.parse_expr()
         token = self.current_token
         if token.type in (LT, GT, LTE, GTE, EQUALS, NEQUALS):
-            self.eat(None)
+            self.eat(ANY)
         else:
             raise Exception("relational operator expected: {}".format(token.value))
         right = self.parse_expr()
@@ -589,7 +629,7 @@ class Parser(object):
         return RemStatement()
 
     def parse_statement(self):
-        # print("parse_statement: {}".format(self.line))
+        log("  parse_statement, current: {}".format(self.current_token))
         if self.current_token.type == LET:
             return self.parse_LET()
         elif self.current_token.type == PRINT:
@@ -650,7 +690,6 @@ def tokenize_all(raw_lines):
     tokenized_lines = {}
     new_index = 0
     for index, line in lines.items():
-        print("{}, line: {}".format(index, line))
         tokens = tokenize(line)
         # print("tokens: {}".format(tokens))
         if len(tokens) > 0:
@@ -659,52 +698,60 @@ def tokenize_all(raw_lines):
     return tokenized_lines
 
 def parse_all(tokenized_lines):
+    log("parsing ...")
     parsed_lines = {}
-    for index, line in list(tokenized_lines.items()):
-        print("parse: {}".format(line))
-        parser = Parser(index, line)
+    tokenized_list = list(tokenized_lines.items())
+    for i in range(len(tokenized_list)):
+        index, line = tokenized_list[i]
+        if i < len(tokenized_list)-1:
+            next_line_number = tokenized_list[i+1][0]
+        else:            
+            next_line_number = None
+
+        log(  "i: {}, line number: {}, next: {}, line: {}".format(i, index, next_line_number, line))
+        #next_line_number = tokenized_list.index(index)
+        log("  parsing: {}, {}".format(index, line))
+        parser = Parser(next_line_number, line)
         node = parser.parse_statement()
-        print("node: {}".format(node))
+        log("    parsed: {}".format(node))
         parsed_lines[index] = node
     return parsed_lines
 
 def interpret_all(parsed_lines):
-    # print("p: {}".format(parsed_lines))
+    log("interpreting ...")
     line_numbers = list(parsed_lines.keys())
-    next = line_numbers[0]
+    line_number = line_numbers[0]
     while True:        
-        # print("next line: {}".format(next))
-        statement = parsed_lines[next]
+        statement = parsed_lines[line_number]
         if statement == None:
-            print("ERROR: line not found: {}".format(next))
-            break        
-        # print("statement: {}".format(statement))
+            print("ERROR: line not found: {}".format(line_number))
+            break       
+        log("  executing: {}, {}".format(line_number, statement)) 
         try:
             result = statement.visit()
         except Exception as exception:            
             print("\nError executing: {}".format(statement))
             print(exception)
             break
+        # find next line number
         if result == None:
-            # prev statement returned no new line number
-            next_index = line_numbers.index(next) + 1
+            next_index = line_numbers.index(line_number) + 1
             if next_index >= len(line_numbers):
-                print("OK.")
                 break
-            next = line_numbers[next_index]            
+            line_number = line_numbers[next_index]          
         elif result == -1:
-            # prev statement was END
-            print("END. OK.")
+            print("END.")
             break
         else:
-            next = result    
+            line_number = result    
+    print("OK.")
 
 def main():
+    print("Tiny Basic v0.1")
     import sys
     if len(sys.argv) < 2:
         print("syntax: tb <filename>")
         return
-    print("==================================================")
     file = open(sys.argv[1], 'r')
     lines = file.readlines()
     tokenized_lines = tokenize_all(lines)
