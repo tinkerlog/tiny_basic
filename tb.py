@@ -76,6 +76,7 @@ RESERVED_KEYWORDS = {
     END:      Token(END)
 }
 
+EOLT = Token(EOL)
 
 class Lexer(object):
 
@@ -210,7 +211,7 @@ class Lexer(object):
                 token.peek_char = self.current_char
                 return token
             
-        return Token(EOL, None)
+        return EOLT
 
 #--- lexer ------------------
 
@@ -258,7 +259,8 @@ class PrintStatement(AST):
                     s = res
                 pos += len(str(s))
                 print(s, end = "")
-        print("")
+        if not(isinstance(expr, Token) and expr.type == COMMA):
+            print("")
 
     def __str__(self):
         return "PRINT {}".format(self.expr_list)
@@ -471,12 +473,11 @@ class Parser(object):
             self.current_token = line.pop(0)
 
     def eat(self, type):
-        # print("  eating {}".format(type))
         if type == self.current_token.type or type == ANY:
             if len(self.line) > 0:
                 self.current_token = self.line.pop(0)
             else:
-                self.current_token == None
+                self.current_token = EOLT
         else:
             raise Exception("expected {} but got {}".format(type, self.current_token.type))
 
@@ -567,6 +568,8 @@ class Parser(object):
         while self.current_token.type in (COMMA, SEMICOLON):
             expr_list.append(self.current_token)
             self.eat(ANY)
+            if self.current_token == EOLT:
+                break
             expr_list.append(self.parse_expr_or_string())
         log("  parsed expr list: {}".format(expr_list))
         return expr_list
@@ -674,6 +677,24 @@ def get_lines(raw_lines):
         line_index += 1
     return lines
 
+def get_indexed_lines(raw_lines):
+    indexed_lines = []
+    index = 0
+    for line in raw_lines:
+        line = line.strip()
+        if not line: continue
+        if line[0].isdigit():
+            tokens = line.split(' ', 1)
+            index = parse_int(tokens[0])
+            indexed_lines.append((index, tokens[1]))
+        else:
+            indexed_lines.append((index, line))
+        index += 1
+    return indexed_lines
+
+
+
+
 def tokenize(line):
     # print("tokenizing: {}".format(line))
     tokens = []
@@ -731,7 +752,7 @@ def interpret_all(parsed_lines):
             result = statement.visit()
         except Exception as exception:            
             print("\nError executing: {}".format(statement))
-            print(exception)
+            raise exception
             break
         # find next line number
         if result == None:
