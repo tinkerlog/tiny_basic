@@ -41,7 +41,8 @@ factor ::=
  
 function ::=
 	'INT(' expression ')' |
-	'SQR(' expression ')' 
+	'SQR(' expression ')' |
+	'RND(' expression ')'
 
 var ::= 
 	'A' | 'B' | ... | 'Z'

@@ -2,6 +2,7 @@
 
 import string
 import math
+import random
 
 debug = False
 
@@ -27,6 +28,8 @@ ID = 'ID'
 TAB = 'TAB'
 SQR = 'SQR'
 INT = 'INT'
+RND = 'RND'
+ABS = 'ABS'
 STRING = 'STRING'
 NUMBER = 'NUMBER'
 FLOAT = 'FLOAT'
@@ -70,6 +73,8 @@ RESERVED_KEYWORDS = {
     TAB:      Token(TAB),
     SQR:      Token(SQR),
     INT:      Token(INT),
+    RND:      Token(RND),
+    ABS:      Token(ABS),
     END:      Token(END)
 }
 
@@ -242,7 +247,7 @@ class PrintStatement(AST):
                 elif expr.type == COMMA:
                     pass
             elif isinstance(expr, Tab):
-                next_pos = expr.visit()
+                next_pos = int(expr.visit())
                 if next_pos > pos:
                     print(" " * (next_pos - pos), end = "")
                     pos = next_pos
@@ -316,9 +321,6 @@ class GosubStatement(AST):
 
 
 class ReturnStatement(AST):
-    def __init__(self):
-        pass
-
     def visit(self):
         return -stack.pop()
 
@@ -327,9 +329,6 @@ class ReturnStatement(AST):
 
 
 class EndStatement(AST):
-    def __init__(self):
-        pass
-
     def visit(self):
         return 0
 
@@ -338,9 +337,6 @@ class EndStatement(AST):
 
 
 class RemStatement(AST):
-    def __init__(self):
-        pass
-
     def __str__(self):
         return "REM"
 
@@ -400,6 +396,10 @@ class Function(AST):
             return math.sqrt(value)
         elif self.name == INT:
             return int(value)
+        elif self.name == RND:
+            return random.random()
+        elif self.name == ABS:
+            return math.abs(value)
         else: 
             raise Exception("unknow function {}".format(self.name))
 
@@ -505,7 +505,7 @@ class Parser(object):
             return Num(token)
         elif token.type == ID:
             return self.parse_var()            
-        elif token.type in (SQR, INT):
+        elif token.type in (SQR, INT, RND, ABS):
             return self.parse_function()
         elif token.type == LPAREN:
             self.eat(LPAREN)
@@ -686,6 +686,7 @@ def parse_all(raw_lines):
             index = new_index
         try:
             tokens = tokenize(sub_line)
+            if len(tokens) == 0: continue
             log("{}, tokens: {}".format(index, tokens))
             parser = Parser(index, tokens)
             node = parser.parse_statement()
@@ -726,7 +727,8 @@ def interpret_all(parsed_lines):
         try:
             result = statement.visit()
         except Exception as e:            
-            print("ERROR: executing {}".format(statement))     
+            print("ERROR: executing {}".format(statement))  
+            print(e)   
             raise       
         line_number = get_next_line_number(result, line_numbers, line_number)
         if line_number == None:
@@ -749,11 +751,8 @@ def main():
     file = open(sys.argv[-1], 'r')
     lines = file.readlines()
     file.close()
-    try:
-        parsed_lines = parse_all(lines)
-        interpret_all(parsed_lines)
-    except:
-        pass
+    parsed_lines = parse_all(lines)
+    interpret_all(parsed_lines)
     
 if __name__ == '__main__':
     main()
