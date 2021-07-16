@@ -399,7 +399,7 @@ class Function(AST):
         elif self.name == RND:
             return random.random()
         elif self.name == ABS:
-            return math.abs(value)
+            return abs(value)
         else: 
             raise Exception("unknow function {}".format(self.name))
 

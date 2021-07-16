@@ -1,5 +1,37 @@
-# tiny_basic
+# Tiny Basic
 
+This is a Tiny Basic interpreter written in Python.
+
+To find out more about Tiny Basic, check https://en.wikipedia.org/wiki/Tiny_BASIC
+
+This version differs from its initial specification:
+* it supports floats
+* it supports TAB() to ease print formatting
+* it has built in functions like ABS, INT, SQR and RND
+* it does not have an interactive repl mode, so no LIST or RUN
+
+The interpreter has no real purpose except amusement. 
+
+You run it like so:
+`tb.py sine.bas`
+
+A simple program to compute sine:
+```basic
+10 PRINT "COMPUTING SIN(X)"
+20 PRINT "ANGLE",
+30 INPUT X
+40 REM sin x = x − x^3/3! + x^5/5! − x^7/7!
+50 LET X = X/180*3.141592
+60 LET A = X*X*X
+70 LET B = A*X*X
+80 LET C = B*X*X
+90 LET S = X - A/6 + B/120 - C/5040
+100 PRINT "SIN=",S
+110 END
+```
+
+## Grammar
+```
 line ::= 
 	number statement | statement
  
@@ -11,9 +43,6 @@ statement ::=
 	'LET' var '=' expression
 	'GOSUB' expression
 	'RETURN'
-	'CLEAR'
-	'LIST'
-	'RUN'
 	'END'
 
 expr-list ::= 
@@ -42,7 +71,8 @@ factor ::=
 function ::=
 	'INT(' expression ')' |
 	'SQR(' expression ')' |
-	'RND(' expression ')'
+	'RND(' expression ')' |
+	'ABS(' expression ')'
 
 var ::= 
 	'A' | 'B' | ... | 'Z'
@@ -67,6 +97,7 @@ relop ::=
 
 string ::= 
 	" ( |!|#|$ ... -|.|/|digit|: ... @|A|B|C ... |X|Y|Z)* "
+```
 
 
 
