@@ -4,7 +4,15 @@ This is a Tiny Basic interpreter written in Python.
 
 To find out more about Tiny Basic, check https://en.wikipedia.org/wiki/Tiny_BASIC
 
-This version differs from its initial specification:
+There was a challenge, posted by Jeff Atwood (coding-horror), to bring 100 ancient basic games back to life by porting them to mordern languages. 
+The idea is to teach how you would do it nowadays.
+I looked at it and walked in the wrong direction and built a basic interpreter, just for fun. It's an implementation of Tiny Basic, a very limited Basic.
+It has no loops, no functions, very limited variables. It feels a bit like an
+assembler of sorts.
+
+https://github.com/coding-horror/basic-computer-games
+
+This version of Tiny Basic differs from its initial specification:
 * it supports floats
 * it supports TAB() to ease print formatting
 * it has built in functions like ABS, INT, SQR and RND
