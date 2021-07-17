@@ -1,3 +1,5 @@
+1 REM lunar.bas, adapted to run with tiny basic.
+2 REM Origin: https://github.com/coding-horror/basic-computer-games
 10 PRINT TAB(33);"LUNAR"
 20 PRINT TAB(15);"CREATIVE COMPUTING MORRISTOWN, NEW JERSEY" 
 25 PRINT""
