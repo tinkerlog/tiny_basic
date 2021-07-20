@@ -38,6 +38,15 @@ A simple program to compute sine:
 110 END
 ```
 
+Special formatting for the PRINT statement is possible.
+* Separating expressions by `,` prints without any space
+* Separating expressions by `;` prints with a single space
+* TAB(x) sets the cursor to position x
+* a trailing `,` omits the CR at the end and makes it possible to have the 
+input `?` on the same line
+
+
+
 ## Grammar
 ```
 line ::= 

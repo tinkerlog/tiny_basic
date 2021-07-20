@@ -3,11 +3,9 @@
 import string
 import math
 import random
+import json
 
 debug = False
-
-vars = {}
-stack = []
 
 ANY = 'any'
 REM = 'REM'
@@ -222,12 +220,13 @@ class AST(object):
         return self.__str__()
 
 class LetStatement(AST):
-    def __init__(self, var, expr):
+    def __init__(self, var, expr, vars):
         self.var = var
         self.expr = expr
+        self.vars = vars
 
     def visit(self):
-        vars[self.var.name] = self.expr.visit()        
+        self.vars[self.var.name] = self.expr.visit()        
 
     def __str__(self):
         return "LET {} = {}".format(self.var, self.expr)
@@ -267,14 +266,15 @@ class PrintStatement(AST):
 
 
 class InputStatement(AST):
-    def __init__(self, var_list):
+    def __init__(self, var_list, vars):
         self.var_list = var_list
+        self.vars = vars
 
     def visit(self):
         for var in self.var_list:
             value = input("?")
             try:                
-                vars[var.name] = int(value)
+                self.vars[var.name] = int(value)
             except:
                 raise Exception("not an int: {}".format(value))
 
@@ -308,12 +308,13 @@ class GotoStatement(AST):
 
 
 class GosubStatement(AST):
-    def __init__(self, expr, line_number):
+    def __init__(self, expr, line_number, stack):
         self.expr = expr
         self.line_number = line_number
+        self.stack = stack
 
     def visit(self):
-        stack.append(self.line_number)
+        self.stack.append(self.line_number)
         return self.expr.visit()
 
     def __str__(self):
@@ -321,8 +322,11 @@ class GosubStatement(AST):
 
 
 class ReturnStatement(AST):
+    def __init__(self, stack):
+        self.stack = stack
+
     def visit(self):
-        return -stack.pop()
+        return -self.stack.pop()
 
     def __str__(self):
         return "RETURN"
@@ -342,11 +346,12 @@ class RemStatement(AST):
 
 
 class Var(AST):
-    def __init__(self, name):
+    def __init__(self, name, vars):
         self.name = name
+        self.vars = vars
 
     def visit(self):
-        return vars.get(self.name, 0)
+        return self.vars.get(self.name, 0)
 
     def __str__(self):
         return "Var " + self.name
@@ -458,9 +463,11 @@ class BinOp(AST):
 
 class Parser(object):
 
-    def __init__(self, line_number, line):
+    def __init__(self, line_number, line, vars, stack):
         self.line_number = line_number
         self.line = line
+        self.vars = vars
+        self.stack = stack
         if len(line) == 0:
             self.current_token = None
         else:            
@@ -482,7 +489,7 @@ class Parser(object):
             raise Exception("length of variable names must be 1: {}".format(name))
         elif name not in string.ascii_uppercase:
             raise Exception("variable name {} not allowed".format(name))
-        return Var(name)
+        return Var(name, self.vars)
 
     def parse_function(self):
         func_name = self.current_token.type
@@ -514,8 +521,6 @@ class Parser(object):
             return node
         raise Exception("parsing factor failed: {}".format(token))
 
-    # term ::=
-    #   factor ((* | /) factor)*
     def parse_term(self):        
         node = self.parse_factor()
         while self.current_token.type in (MUL, DIV):
@@ -524,8 +529,6 @@ class Parser(object):
             node = BinOp(left=node, op=token, right=self.parse_factor())
         return node    
 
-    # expr ::=
-    #   term ((+ | -) term)*
     def parse_expr(self):
         node = self.parse_term()
         while self.current_token.type in (PLUS, MINUS):
@@ -534,14 +537,12 @@ class Parser(object):
             node = BinOp(left=node, op=token, right=self.parse_term())
         return node
 
-
     def parse_TAB(self):
         self.eat(TAB)
         self.eat(LPAREN)
         expr = self.parse_expr()
         self.eat(RPAREN)
         return Tab(expr)
-
 
     def parse_expr_or_string(self):  
         log("  parse expr or string, current: {}".format(self.current_token))
@@ -581,7 +582,7 @@ class Parser(object):
         var = self.parse_var()
         self.eat(EQUALS)
         expr = self.parse_expr()
-        return LetStatement(var, expr)
+        return LetStatement(var, expr, self.vars)
 
     def parse_PRINT(self):
         self.eat(PRINT)
@@ -589,7 +590,7 @@ class Parser(object):
 
     def parse_INPUT(self):
         self.eat(INPUT)
-        return InputStatement(self.parse_var_list())
+        return InputStatement(self.parse_var_list(), self.vars)
 
     def parse_IF(self):
         self.eat(IF)
@@ -611,11 +612,11 @@ class Parser(object):
 
     def parse_GOSUB(self):
         self.eat(GOSUB)
-        return GosubStatement(self.parse_expr(), self.line_number)
+        return GosubStatement(self.parse_expr(), self.line_number, self.stack)
 
     def parse_RETURN(self):
         self.eat(RETURN)
-        return ReturnStatement()
+        return ReturnStatement(self.stack)
 
     def parse_END(self):
         self.eat(END)
@@ -648,111 +649,150 @@ class Parser(object):
         else:
             raise Exception("can not parse: {}".format(self.current_token))
 
+class TinyBasic(object):
 
-def parse_int(token):
-	try:
-		return int(token)
-	except:
-		return -1
+    def __init__(self, vars, stack, line_number, raw_lines):
+        self.vars = vars
+        self.stack = stack
+        self.line_number = line_number
+        self.raw_lines = raw_lines
 
-def get_indexed_line(raw_line, index):
-    line = raw_line.strip()
-    if not line: return None, None
-    if line[0].isdigit():
-        tokens = line.split(' ', 1)
-        index = parse_int(tokens[0])
-        return (index, tokens[1])
-    else:
-        return (index, line)        
+    def parse_int(self, token):
+	    try:
+		    return int(token)
+	    except:
+		    return -1
 
-def tokenize(line):
-    tokens = []
-    lexer = Lexer(line)    
-    while (True):
-        token = lexer.get_next_token()
-        if token.type == EOL:
-            break
-        tokens.append(token)
-    return tokens
-
-def parse_all(raw_lines):
-    log("parsing ...")
-    index = 0
-    parsed_lines = []
-    for raw_line in raw_lines:
-        (new_index, sub_line) = get_indexed_line(raw_line, index)
-        if not new_index: continue
+    def get_indexed_line(self, raw_line, index):
+        line = raw_line.strip()
+        if not line: return None, None
+        if line[0].isdigit():
+            tokens = line.split(' ', 1)
+            index = self.parse_int(tokens[0])
+            return (index, tokens[1])
         else:
-            index = new_index
-        try:
-            tokens = tokenize(sub_line)
-            if len(tokens) == 0: continue
-            log("{}, tokens: {}".format(index, tokens))
-            parser = Parser(index, tokens)
-            node = parser.parse_statement()
-        except Exception as e:
-            print("ERROR: on line: {} {}\n{}".format(index, sub_line, e))
-            raise
-        parsed_lines.append((index, node))
-        index += 1
-    return parsed_lines
+            return (index, line)        
 
-def get_next_line_number(line_number, line_numbers, current_index):
-    if line_number == None: # just use next line
-        next_index = line_numbers.index(current_index) + 1
-        if next_index >= len(line_numbers):
-            return
-    elif line_number < 0: # coming from RETURN
-        next_index = line_numbers.index(-line_number) + 1
-        if next_index >= len(line_numbers):
-            return
-    elif line_number == 0:  # coming from END
-        print("END.")
-        return
-    else: # coming from GOTO or GOSUB
-        return line_number  
-    return line_numbers[next_index]  
+    def tokenize(self, line):
+        tokens = []
+        lexer = Lexer(line)    
+        while (True):
+            token = lexer.get_next_token()
+            if token.type == EOL:
+                break
+            tokens.append(token)
+        return tokens
 
-def interpret_all(parsed_lines):
-    log("interpreting ...")
-    line_numbers = [number for number, tokens in parsed_lines]
-    memory = {number: tokens for number, tokens in parsed_lines}
-    line_number = line_numbers[0]
-    while True:                
-        if line_number not in memory:
-            print("ERROR: line not found: {}".format(line_number))
-            raise     
-        statement = memory[line_number]
-        log("  executing: {}, {}".format(line_number, statement)) 
-        try:
-            result = statement.visit()
-        except Exception as e:            
-            print("ERROR: executing {}".format(statement))  
-            print(e)   
-            raise       
-        line_number = get_next_line_number(result, line_numbers, line_number)
-        if line_number == None:
-            break
-    print("OK.")
+    def parse_all(self, raw_lines):
+        log("parsing ...")
+        index = 0
+        parsed_lines = []
+        for raw_line in raw_lines:
+            (new_index, sub_line) = self.get_indexed_line(raw_line, index)
+            if not new_index: continue
+            else:
+                index = new_index
+            try:
+                tokens = self.tokenize(sub_line)
+                if len(tokens) == 0: continue
+                log("{}, tokens: {}".format(index, tokens))
+                parser = Parser(index, tokens, self.vars, self.stack)
+                node = parser.parse_statement()
+            except Exception as e:
+                print("ERROR: on line: {} {}\n{}".format(index, sub_line, e))
+                raise
+            parsed_lines.append((index, node))
+            index += 1
+        return parsed_lines
+
+    def get_next_line_number(self, line_number, line_numbers, current_index):
+        if line_number == None: # just use next line
+            next_index = line_numbers.index(current_index) + 1
+            if next_index >= len(line_numbers):
+                return
+        elif line_number < 0: # coming from RETURN
+            next_index = line_numbers.index(-line_number) + 1
+            if next_index >= len(line_numbers):
+                return
+        elif line_number == 0:  # coming from END
+            print("END.")
+            return
+        else: # coming from GOTO or GOSUB
+            return line_number  
+        return line_numbers[next_index]  
+
+    def interpret_all(self):
+        parsed_lines = self.parse_all(self.raw_lines)
+        log("interpreting ...")
+        line_numbers = [number for number, tokens in parsed_lines]
+        memory = {number: tokens for number, tokens in parsed_lines}
+        line_number = line_numbers[0]
+        while True:                
+            if line_number not in memory:
+                print("ERROR: line not found: {}".format(line_number))
+                raise     
+            statement = memory[line_number]
+            log("  executing: {}, {}".format(line_number, statement)) 
+            try:
+                result = statement.visit()
+            except Exception as e:            
+                print("ERROR: executing {}".format(statement))  
+                print(e)   
+                raise       
+            line_number = self.get_next_line_number(result, line_numbers, line_number)
+            if line_number == None:
+                break
+        print("OK.")
+
+def export_state(vars, stack, line_number, raw_lines):
+    export = { "vars" : vars, "stack": stack, "line": line_number, "prog": raw_lines }
+    export_json = json.dumps(export)
+    print("export: {}".format(export_json))
+
+def import_state(state):
+    imported = json.loads(state)
+    return 
+    vars = imported.vars
+    stack = imported.stack
+    line_number = imported.line
+    raw_lines = imported.prog    
 
 def log(msg):
     if debug:
         print(msg)
 
+def load_file(filename):
+    file = open(filename, 'r')
+    raw_lines = file.readlines()
+    file.close()
+    return raw_lines
+
+def resume(filename):
+    raw_lines = load_file(filename)
+    state_json = string.join(raw_lines)
+    state = json.loads(state_json)
+    tiny_basic = TinyBasic(state.vars, state.stack, state.line, state.prog)
+    tiny_basic.interpret_all()
+
+def run(filename):
+    raw_lines = load_file(filename)
+    tiny_basic = TinyBasic({}, [], 0, raw_lines)
+    tiny_basic.interpret_all()
+
 def main():
-    print("Tiny Basic v0.1")
     import sys
+    print("Tiny Basic v0.1")
     global debug
     if len(sys.argv) < 2:
         print("syntax: tb [-d] <filename>")
         return
     if sys.argv[1] == '-d':
         debug = True
-    file = open(sys.argv[-1], 'r')
-    lines = file.readlines()
-    file.close()
-    parsed_lines = parse_all(lines)
-    interpret_all(parsed_lines)
-    
+    filename = sys.argv[-1]
+    if filename.lower().endswith('json'):
+        resume(filename)
+    else:
+        run(filename)
+
 if __name__ == '__main__':
     main()
