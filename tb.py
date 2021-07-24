@@ -4,6 +4,7 @@ import string
 import math
 import random
 import json
+from enum import Enum
 
 debug = False
 
@@ -28,6 +29,9 @@ SQR = 'SQR'
 INT = 'INT'
 RND = 'RND'
 ABS = 'ABS'
+LIST = 'LIST'
+RUN = 'RUN'
+CLEAR = 'CLEAR'
 STRING = 'STRING'
 NUMBER = 'NUMBER'
 FLOAT = 'FLOAT'
@@ -58,23 +62,33 @@ class Token(object):
         return self.__str__()
 
 
-RESERVED_KEYWORDS = {
-    REM:      Token(REM),
-    PRINT:    Token(PRINT),
-    IF:       Token(IF),
-    THEN:     Token(THEN),
-    GOTO:     Token(GOTO),
-    INPUT:    Token(INPUT),
-    LET:      Token(LET),
-    GOSUB:    Token(GOSUB),
-    RETURN:   Token(RETURN),
-    TAB:      Token(TAB),
-    SQR:      Token(SQR),
-    INT:      Token(INT),
-    RND:      Token(RND),
-    ABS:      Token(ABS),
-    END:      Token(END)
+LANGUAGE_KEYWORDS = {
+    REM:    Token(REM),
+    PRINT:  Token(PRINT),
+    IF:     Token(IF),
+    THEN:   Token(THEN),
+    GOTO:   Token(GOTO),
+    INPUT:  Token(INPUT),
+    LET:    Token(LET),
+    GOSUB:  Token(GOSUB),
+    RETURN: Token(RETURN),
+    TAB:    Token(TAB),
+    SQR:    Token(SQR),
+    INT:    Token(INT),
+    RND:    Token(RND),
+    ABS:    Token(ABS),
+    END:    Token(END),
+    LIST:   Token(LIST),
+    RUN:    Token(RUN),
+    CLEAR:  Token(CLEAR)
 }
+
+IMMEDIATE_KEYWORDS = {
+    LIST,
+    RUN,
+    CLEAR
+}
+
 
 EOLT = Token(EOL)
 
@@ -130,7 +144,7 @@ class Lexer(object):
         while self.current_char is not None and (self.current_char.isalnum() or self.current_char == '_'):
             result += self.current_char
             self.advance()
-        token = RESERVED_KEYWORDS.get(result, Token(ID, result))        
+        token = LANGUAGE_KEYWORDS.get(result, Token(ID, result))        
         return token
 
     def string(self):
@@ -647,7 +661,12 @@ class Parser(object):
         elif self.current_token.type == REM:
             return self.parse_REM()         
         else:
-            raise Exception("can not parse: {}".format(self.current_token))
+            raise Exception("parsing: {}".format(self.current_token))
+        
+
+class Mode(Enum):
+    INTERACTIVE = 1
+    RUNNING = 2
 
 class TinyBasic(object):
 
@@ -656,6 +675,8 @@ class TinyBasic(object):
         self.stack = stack
         self.line_number = line_number
         self.raw_lines = raw_lines
+        self.memory = {}
+        self.mode = Mode.INTERACTIVE
 
     def parse_int(self, token):
 	    try:
@@ -721,41 +742,101 @@ class TinyBasic(object):
             return line_number  
         return line_numbers[next_index]  
 
+    def prepare(self):
+        self.parsed_lines = self.parse_all(self.raw_lines)
+        self.line_numbers = [number for number, tokens in self.parsed_lines]
+        self.memory = {number: tokens for number, tokens in self.parsed_lines}
+        self.line_number = self.line_numbers[0]
+
+
     def interpret_all(self):
-        parsed_lines = self.parse_all(self.raw_lines)
         log("interpreting ...")
-        line_numbers = [number for number, tokens in parsed_lines]
-        memory = {number: tokens for number, tokens in parsed_lines}
-        line_number = line_numbers[0]
         while True:                
-            if line_number not in memory:
-                print("ERROR: line not found: {}".format(line_number))
-                raise     
-            statement = memory[line_number]
-            log("  executing: {}, {}".format(line_number, statement)) 
+            if self.line_number not in self.memory:
+                raise Exception("ERROR: line {} not found".format(self.line_number))
+            statement = self.memory[self.line_number]
+            log("  executing: {}, {}".format(self.line_number, statement)) 
             try:
                 result = statement.visit()
             except Exception as e:            
                 print("ERROR: executing {}".format(statement))  
                 print(e)   
                 raise       
-            line_number = self.get_next_line_number(result, line_numbers, line_number)
-            if line_number == None:
+            self.line_number = self.get_next_line_number(result, self.line_numbers, self.line_number)
+            if self.line_number == None:
                 break
         print("OK.")
+
+    def run(self):
+        if len(self.memory) == 0: raise Exception("nothing to run")
+        self.line_numbers = sorted(self.memory.keys())
+        self.line_number = self.line_numbers[0]
+        while True:
+            try:
+                if self.line_number not in self.memory: raise Exception("line not found")
+                statement = self.memory[self.line_number]
+                result = statement.visit()
+                self.line_number = self.get_next_line_number(result, self.line_numbers, self.line_number)
+                if self.line_number == None:
+                    break
+            except Exception as e:
+                print("ERROR {} on line {}".format(e, statement))
+                if debug: raise e
+                break
+
+
+    def execute_immediate(self, command):
+        if command == LIST:
+            lines_numbers = sorted(self.memory.keys())
+            for line_number in lines_numbers:
+                statement = self.memory[line_number]                
+                print("{} {}".format(line_number, statement))
+            print("OK")
+        elif command == RUN:
+            self.mode = Mode.RUNNING
+            self.run()
+            self.mode = Mode.INTERACTIVE
+            print("OK")
+        elif command == CLEAR:
+            self.memory.clear()
+            print("OK")            
+
+
+    def repl(self):
+        import sys
+        for raw_line in sys.stdin:
+            try:
+                raw_line = raw_line.strip()
+                if not raw_line: continue
+                if raw_line[0].isdigit():
+                    tokens = raw_line.split(' ', 1)
+                    if len(tokens) == 1: raise Exception("empty line?")
+                    line_number = int(tokens[0])
+                    raw_sub_line = tokens[1]
+                    if not raw_sub_line: raise Exception("empty line")
+                    tokens = self.tokenize(raw_sub_line)
+                    log("{}, tokens: {}".format(line_number, tokens))
+                    parser = Parser(line_number, tokens, self.vars, self.stack)
+                    node = parser.parse_statement()
+                    self.memory[line_number] = node
+                else:
+                    tokens = self.tokenize(raw_line)
+                    if tokens[0].type in IMMEDIATE_KEYWORDS:
+                        self.execute_immediate(tokens[0].type)
+                    else:
+                        parser = Parser(0, tokens, self.vars, self.stack)
+                        node = parser.parse_statement()
+                        node.visit()
+
+            except Exception as e:
+                print("ERROR {} on line {}".format(e, raw_line))
+                if debug: raise e
+
 
 def export_state(vars, stack, line_number, raw_lines):
     export = { "vars" : vars, "stack": stack, "line": line_number, "prog": raw_lines }
     export_json = json.dumps(export)
     print("export: {}".format(export_json))
-
-def import_state(state):
-    imported = json.loads(state)
-    return 
-    vars = imported.vars
-    stack = imported.stack
-    line_number = imported.line
-    raw_lines = imported.prog    
 
 def log(msg):
     if debug:
@@ -767,32 +848,28 @@ def load_file(filename):
     file.close()
     return raw_lines
 
-def resume(filename):
-    raw_lines = load_file(filename)
-    state_json = string.join(raw_lines)
-    state = json.loads(state_json)
-    tiny_basic = TinyBasic(state.vars, state.stack, state.line, state.prog)
-    tiny_basic.interpret_all()
-
 def run(filename):
     raw_lines = load_file(filename)
     tiny_basic = TinyBasic({}, [], 0, raw_lines)
-    tiny_basic.interpret_all()
+    tiny_basic.prepare()
+    tiny_basic.run()
 
-def main():
-    import sys
+def repl():
+    tiny_basic = TinyBasic({}, [], 0, None)
+    tiny_basic.repl()
+
+def main(argv):
     print("Tiny Basic v0.1")
     global debug
-    if len(sys.argv) < 2:
-        print("syntax: tb [-d] <filename>")
-        return
-    if sys.argv[1] == '-d':
-        debug = True
-    filename = sys.argv[-1]
-    if filename.lower().endswith('json'):
-        resume(filename)
-    else:
+    filename = None
+    for arg in argv:
+        if arg == "-d": debug = True
+        else: filename = arg
+    if filename != None:
         run(filename)
+    else:
+        repl()
 
 if __name__ == '__main__':
-    main()
+    import sys
+    main(sys.argv[1:])
