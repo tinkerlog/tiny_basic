@@ -4,9 +4,6 @@ import string
 import math
 import random
 import json
-from enum import Enum
-
-debug = False
 
 ANY = 'any'
 REM = 'REM'
@@ -122,9 +119,12 @@ class Lexer(object):
         while self.current_char != None and self.current_char.isspace():
             self.advance()
 
-    def skip_line_comment(self):
+    def get_line_comment(self):
+        result = ""
         while self.current_char is not None:
+            result += self.current_char
             self.advance()
+        return result
 
     def number(self):
         result = ''        
@@ -144,7 +144,7 @@ class Lexer(object):
         while self.current_char is not None and (self.current_char.isalnum() or self.current_char == '_'):
             result += self.current_char
             self.advance()
-        token = LANGUAGE_KEYWORDS.get(result, Token(ID, result))        
+        token = LANGUAGE_KEYWORDS.get(result.upper(), Token(ID, result))        
         return token
 
     def string(self):
@@ -166,8 +166,8 @@ class Lexer(object):
             elif self.current_char.isalpha():
                 token = self._id()
                 if token.type == REM:
-                    self.skip_line_comment()
-                    token = None
+                    comment = self.get_line_comment()
+                    token = Token(REM, comment)
             elif self.current_char == '"':
                 token = self.string()
             elif self.current_char.isdigit():
@@ -355,8 +355,10 @@ class EndStatement(AST):
 
 
 class RemStatement(AST):
+    def __init__(self, comment):
+        self.comment = comment
     def __str__(self):
-        return "REM"
+        return "REM " + self.comment
 
 
 class Var(AST):
@@ -411,16 +413,11 @@ class Function(AST):
 
     def visit(self):
         value = self.expr.visit()
-        if self.name == SQR:
-            return math.sqrt(value)
-        elif self.name == INT:
-            return int(value)
-        elif self.name == RND:
-            return random.random()
-        elif self.name == ABS:
-            return abs(value)
-        else: 
-            raise Exception("unknow function {}".format(self.name))
+        if   self.name == SQR: return math.sqrt(value)
+        elif self.name == INT: return int(value)
+        elif self.name == RND: return random.random()
+        elif self.name == ABS: return abs(value)
+        else: raise Exception("unknow function {}".format(self.name))
 
     def __str__(self):
         return "FUNC {} ( {} )".format(self.name, str(self.expr))
@@ -432,10 +429,8 @@ class UnOp(AST):
         self.factor = factor
 
     def visit(self):
-        if self.op.type == PLUS:
-            return self.factor.visit()
-        elif self.op.type == MINUS:
-            return -self.factor.visit()
+        if   self.op.type == PLUS: return self.factor.visit()
+        elif self.op.type == MINUS: return -self.factor.visit()
     
     def __str__(self):
         return "UnOp {} {}".format(self.op, self.factor)
@@ -559,7 +554,6 @@ class Parser(object):
         return Tab(expr)
 
     def parse_expr_or_string(self):  
-        log("  parse expr or string, current: {}".format(self.current_token))
         if self.current_token.type == TAB:
             node = self.parse_TAB()      
         elif self.current_token.type == STRING:
@@ -567,11 +561,9 @@ class Parser(object):
             self.eat(STRING)
         else:
             node = self.parse_expr()
-        log("  parsed expr str: {}".format(node))
         return node
 
     def parse_expr_list(self):
-        log("  parse expr_list")
         expr_list = []
         expr_list.append(self.parse_expr_or_string())
         while self.current_token.type in (COMMA, SEMICOLON):
@@ -580,7 +572,6 @@ class Parser(object):
             if self.current_token == EOLT:
                 break
             expr_list.append(self.parse_expr_or_string())
-        log("  parsed expr list: {}".format(expr_list))
         return expr_list
 
     def parse_var_list(self):
@@ -613,7 +604,7 @@ class Parser(object):
         if token.type in (LT, GT, LTE, GTE, EQUALS, NEQUALS):
             self.eat(ANY)
         else:
-            raise Exception("relational operator expected: {}".format(token.value))
+            self.error("relational operator expected: {}".format(token.value))
         right = self.parse_expr()
         self.eat(THEN)
         statement = self.parse_statement()
@@ -637,31 +628,22 @@ class Parser(object):
         return EndStatement()
 
     def parse_REM(self):
+        comment = self.current_token.value
         self.eat(REM)
-        return RemStatement()
+        return RemStatement(comment)
 
     def parse_statement(self):
-        log("  parse_statement, current: {}".format(self.current_token))
-        if self.current_token.type == LET:
-            return self.parse_LET()
-        elif self.current_token.type == PRINT:
-            return self.parse_PRINT()
-        elif self.current_token.type == INPUT:
-            return self.parse_INPUT()
-        elif self.current_token.type == IF:
-            return self.parse_IF()
-        elif self.current_token.type == GOTO:
-            return self.parse_GOTO()
-        elif self.current_token.type == GOSUB:
-            return self.parse_GOSUB()
-        elif self.current_token.type == RETURN:
-            return self.parse_RETURN()
-        elif self.current_token.type == END:
-            return self.parse_END()   
-        elif self.current_token.type == REM:
-            return self.parse_REM()         
-        else:
-            raise Exception("parsing: {}".format(self.current_token))
+        type = self.current_token.type.upper()
+        if   type == LET:    return self.parse_LET()
+        elif type == PRINT:  return self.parse_PRINT()
+        elif type == INPUT:  return self.parse_INPUT()
+        elif type == IF:     return self.parse_IF()
+        elif type == GOTO:   return self.parse_GOTO()
+        elif type == GOSUB:  return self.parse_GOSUB()
+        elif type == RETURN: return self.parse_RETURN()
+        elif type == END:    return self.parse_END()   
+        elif type == REM:    return self.parse_REM()         
+        else: raise Exception("parsing: {}".format(self.current_token))
         
 
 class TinyBasic(object):
@@ -672,9 +654,6 @@ class TinyBasic(object):
         self.line_number = line_number
         self.raw_lines = raw_lines
         self.memory = {}
-        if raw_lines != None:
-            for raw_line in self.raw_lines:
-                self.parse_line(raw_line)
 
     def tokenize(self, line):
         tokens = []
@@ -693,10 +672,16 @@ class TinyBasic(object):
         raw_sub_line = tokens[1]
         if not raw_sub_line: raise Exception("empty line")
         tokens = self.tokenize(raw_sub_line)
-        log("{}, tokens: {}".format(line_number, tokens))
         parser = Parser(line_number, tokens, self.vars, self.stack)
         node = parser.parse_statement()
         self.memory[line_number] = node
+
+    def parse_all(self):
+        for raw_line in self.raw_lines:
+            try:
+                self.parse_line(raw_line)
+            except Exception as e:
+                raise Exception("{} on line: {}".format(e, raw_line))
 
     def get_next_line_number(self, line_number, line_numbers, current_index):
         if line_number == None:                    # just use next line
@@ -713,16 +698,11 @@ class TinyBasic(object):
         self.line_numbers = sorted(self.memory.keys())
         self.line_number = self.line_numbers[0]
         while True:
-            try:
-                if self.line_number not in self.memory: raise Exception("line not found")
-                statement = self.memory[self.line_number]
-                result = statement.visit()
-                self.line_number = self.get_next_line_number(result, self.line_numbers, self.line_number)
-                if self.line_number == None: break
-            except Exception as e:
-                print("ERROR {} on line {}".format(e, statement))
-                if debug: raise e
-                break
+            if self.line_number not in self.memory: raise Exception("line not found")
+            statement = self.memory[self.line_number]
+            result = statement.visit()
+            self.line_number = self.get_next_line_number(result, self.line_numbers, self.line_number)
+            if self.line_number == None: break
 
     def execute_immediate(self, command):
         if command == LIST:
@@ -730,14 +710,9 @@ class TinyBasic(object):
             for line_number in lines_numbers:
                 statement = self.memory[line_number]                
                 print("{} {}".format(line_number, statement))
-            print("OK")
-        elif command == RUN:
-            self.run()
-            print("OK")
-        elif command == CLEAR:
-            self.memory.clear()
-            print("OK")    
-
+        elif command == RUN: self.run()
+        elif command == CLEAR: self.memory.clear()
+        print("OK")
 
     def repl(self):
         import sys
@@ -756,18 +731,12 @@ class TinyBasic(object):
                         node = parser.parse_statement()
                         node.visit()
             except Exception as e:
-                print("ERROR {} on line {}".format(e, raw_line))
-                if debug: raise e
-
+                print("ERROR {} on line: {}".format(e, raw_line))
 
 def export_state(vars, stack, line_number, raw_lines):
     export = { "vars" : vars, "stack": stack, "line": line_number, "prog": raw_lines }
     export_json = json.dumps(export)
     print("export: {}".format(export_json))
-
-def log(msg):
-    if debug:
-        print(msg)
 
 def load_file(filename):
     file = open(filename, 'r')
@@ -778,7 +747,11 @@ def load_file(filename):
 def run(filename):
     raw_lines = load_file(filename)
     tiny_basic = TinyBasic({}, [], 0, raw_lines)
-    tiny_basic.run()
+    try:
+        tiny_basic.parse_all()
+        tiny_basic.run()
+    except Exception as e:
+        print("ERROR: {}".format(e))
 
 def repl():
     tiny_basic = TinyBasic({}, [], 0, None)
@@ -786,11 +759,7 @@ def repl():
 
 def main(argv):
     print("Tiny Basic v0.1")
-    global debug
-    filename = None
-    for arg in argv:
-        if arg == "-d": debug = True
-        else: filename = arg
+    filename = argv[0] if len(argv) > 0 else None
     if filename != None:
         run(filename)
     else:
