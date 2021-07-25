@@ -678,10 +678,11 @@ class TinyBasic(object):
 
     def parse_all(self):
         for raw_line in self.raw_lines:
+            if not raw_line.strip(): continue
             try:
                 self.parse_line(raw_line)
             except Exception as e:
-                raise Exception("{} on line: {}".format(e, raw_line))
+                raise Exception("{}, {}".format(raw_line, e))
 
     def get_next_line_number(self, line_number, line_numbers, current_index):
         if line_number == None:                    # just use next line
@@ -698,7 +699,8 @@ class TinyBasic(object):
         self.line_numbers = sorted(self.memory.keys())
         self.line_number = self.line_numbers[0]
         while True:
-            if self.line_number not in self.memory: raise Exception("line not found")
+            if self.line_number not in self.memory:
+                raise Exception("{}, line number not found".format(statement))
             statement = self.memory[self.line_number]
             result = statement.visit()
             self.line_number = self.get_next_line_number(result, self.line_numbers, self.line_number)
@@ -731,7 +733,7 @@ class TinyBasic(object):
                         node = parser.parse_statement()
                         node.visit()
             except Exception as e:
-                print("ERROR {} on line: {}".format(e, raw_line))
+                print("ERROR: {}, {}".format(raw_line, e))
 
 def export_state(vars, stack, line_number, raw_lines):
     export = { "vars" : vars, "stack": stack, "line": line_number, "prog": raw_lines }
@@ -759,9 +761,8 @@ def repl():
 
 def main(argv):
     print("Tiny Basic v0.1")
-    filename = argv[0] if len(argv) > 0 else None
-    if filename != None:
-        run(filename)
+    if len(argv) > 0:
+        run(argv[0])
     else:
         repl()
 

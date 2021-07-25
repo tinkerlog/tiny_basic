@@ -9,5 +9,3 @@
 90 LET S = X - A/6 + B/120 - C/5040
 100 PRINT "SIN=",S
 110 END
-
-
