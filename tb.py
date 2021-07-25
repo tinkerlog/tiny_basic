@@ -664,10 +664,6 @@ class Parser(object):
             raise Exception("parsing: {}".format(self.current_token))
         
 
-class Mode(Enum):
-    INTERACTIVE = 1
-    RUNNING = 2
-
 class TinyBasic(object):
 
     def __init__(self, vars, stack, line_number, raw_lines):
@@ -676,23 +672,9 @@ class TinyBasic(object):
         self.line_number = line_number
         self.raw_lines = raw_lines
         self.memory = {}
-        self.mode = Mode.INTERACTIVE
-
-    def parse_int(self, token):
-	    try:
-		    return int(token)
-	    except:
-		    return -1
-
-    def get_indexed_line(self, raw_line, index):
-        line = raw_line.strip()
-        if not line: return None, None
-        if line[0].isdigit():
-            tokens = line.split(' ', 1)
-            index = self.parse_int(tokens[0])
-            return (index, tokens[1])
-        else:
-            return (index, line)        
+        if raw_lines != None:
+            for raw_line in self.raw_lines:
+                self.parse_line(raw_line)
 
     def tokenize(self, line):
         tokens = []
@@ -704,68 +686,27 @@ class TinyBasic(object):
             tokens.append(token)
         return tokens
 
-    def parse_all(self, raw_lines):
-        log("parsing ...")
-        index = 0
-        parsed_lines = []
-        for raw_line in raw_lines:
-            (new_index, sub_line) = self.get_indexed_line(raw_line, index)
-            if not new_index: continue
-            else:
-                index = new_index
-            try:
-                tokens = self.tokenize(sub_line)
-                if len(tokens) == 0: continue
-                log("{}, tokens: {}".format(index, tokens))
-                parser = Parser(index, tokens, self.vars, self.stack)
-                node = parser.parse_statement()
-            except Exception as e:
-                print("ERROR: on line: {} {}\n{}".format(index, sub_line, e))
-                raise
-            parsed_lines.append((index, node))
-            index += 1
-        return parsed_lines
+    def parse_line(self, raw_line):        
+        tokens = raw_line.split(' ', 1)
+        if len(tokens) == 1: raise Exception("empty line?")
+        line_number = int(tokens[0])
+        raw_sub_line = tokens[1]
+        if not raw_sub_line: raise Exception("empty line")
+        tokens = self.tokenize(raw_sub_line)
+        log("{}, tokens: {}".format(line_number, tokens))
+        parser = Parser(line_number, tokens, self.vars, self.stack)
+        node = parser.parse_statement()
+        self.memory[line_number] = node
 
     def get_next_line_number(self, line_number, line_numbers, current_index):
-        if line_number == None: # just use next line
+        if line_number == None:                    # just use next line
             next_index = line_numbers.index(current_index) + 1
-            if next_index >= len(line_numbers):
-                return
-        elif line_number < 0: # coming from RETURN
+        elif line_number < 0:                      # coming from RETURN
             next_index = line_numbers.index(-line_number) + 1
-            if next_index >= len(line_numbers):
-                return
-        elif line_number == 0:  # coming from END
-            print("END.")
-            return
-        else: # coming from GOTO or GOSUB
-            return line_number  
+        elif line_number == 0: return              # coming from END
+        else: return line_number                   # coming from GOTO or GOSUB              
+        if next_index >= len(line_numbers): return # last statement reached
         return line_numbers[next_index]  
-
-    def prepare(self):
-        self.parsed_lines = self.parse_all(self.raw_lines)
-        self.line_numbers = [number for number, tokens in self.parsed_lines]
-        self.memory = {number: tokens for number, tokens in self.parsed_lines}
-        self.line_number = self.line_numbers[0]
-
-
-    def interpret_all(self):
-        log("interpreting ...")
-        while True:                
-            if self.line_number not in self.memory:
-                raise Exception("ERROR: line {} not found".format(self.line_number))
-            statement = self.memory[self.line_number]
-            log("  executing: {}, {}".format(self.line_number, statement)) 
-            try:
-                result = statement.visit()
-            except Exception as e:            
-                print("ERROR: executing {}".format(statement))  
-                print(e)   
-                raise       
-            self.line_number = self.get_next_line_number(result, self.line_numbers, self.line_number)
-            if self.line_number == None:
-                break
-        print("OK.")
 
     def run(self):
         if len(self.memory) == 0: raise Exception("nothing to run")
@@ -777,13 +718,11 @@ class TinyBasic(object):
                 statement = self.memory[self.line_number]
                 result = statement.visit()
                 self.line_number = self.get_next_line_number(result, self.line_numbers, self.line_number)
-                if self.line_number == None:
-                    break
+                if self.line_number == None: break
             except Exception as e:
                 print("ERROR {} on line {}".format(e, statement))
                 if debug: raise e
                 break
-
 
     def execute_immediate(self, command):
         if command == LIST:
@@ -793,13 +732,11 @@ class TinyBasic(object):
                 print("{} {}".format(line_number, statement))
             print("OK")
         elif command == RUN:
-            self.mode = Mode.RUNNING
             self.run()
-            self.mode = Mode.INTERACTIVE
             print("OK")
         elif command == CLEAR:
             self.memory.clear()
-            print("OK")            
+            print("OK")    
 
 
     def repl(self):
@@ -809,16 +746,7 @@ class TinyBasic(object):
                 raw_line = raw_line.strip()
                 if not raw_line: continue
                 if raw_line[0].isdigit():
-                    tokens = raw_line.split(' ', 1)
-                    if len(tokens) == 1: raise Exception("empty line?")
-                    line_number = int(tokens[0])
-                    raw_sub_line = tokens[1]
-                    if not raw_sub_line: raise Exception("empty line")
-                    tokens = self.tokenize(raw_sub_line)
-                    log("{}, tokens: {}".format(line_number, tokens))
-                    parser = Parser(line_number, tokens, self.vars, self.stack)
-                    node = parser.parse_statement()
-                    self.memory[line_number] = node
+                    self.parse_line(raw_line)
                 else:
                     tokens = self.tokenize(raw_line)
                     if tokens[0].type in IMMEDIATE_KEYWORDS:
@@ -827,7 +755,6 @@ class TinyBasic(object):
                         parser = Parser(0, tokens, self.vars, self.stack)
                         node = parser.parse_statement()
                         node.visit()
-
             except Exception as e:
                 print("ERROR {} on line {}".format(e, raw_line))
                 if debug: raise e
@@ -851,7 +778,6 @@ def load_file(filename):
 def run(filename):
     raw_lines = load_file(filename)
     tiny_basic = TinyBasic({}, [], 0, raw_lines)
-    tiny_basic.prepare()
     tiny_basic.run()
 
 def repl():
