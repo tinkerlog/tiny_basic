@@ -98,9 +98,6 @@ class Lexer(object):
         self.current_token = None        
         self.peek_token = None
 
-    def error(self):
-        raise Exception("Invalid character: {}".format(self.current_char))
-
     def peek(self):
         peek_pos = self.pos + 1
         if peek_pos > len(self.text) - 1:
@@ -218,7 +215,7 @@ class Lexer(object):
                 self.advance()
                 token = Token(RPAREN, ')')
             else:
-                self.error()
+                raise Exception("Invalid character: {}".format(self.current_char))
 
             if token != None:
                 self.skip_whitespace()
@@ -247,7 +244,8 @@ class LetStatement(AST):
 
 
 class PrintStatement(AST):
-    def __init__(self, expr_list):
+    def __init__(self, output, expr_list):
+        self.output = output
         self.expr_list = expr_list
 
     def visit(self):
@@ -255,14 +253,16 @@ class PrintStatement(AST):
         for expr in self.expr_list:      
             if isinstance(expr, Token):
                 if expr.type == SEMICOLON:
-                    print(" ", end = "")
+                    self.output.print(" ")
+                    # print(" ", end = "")
                     pos += 1
                 elif expr.type == COMMA:
                     pass
             elif isinstance(expr, Tab):
                 next_pos = int(expr.visit())
                 if next_pos > pos:
-                    print(" " * (next_pos - pos), end = "")
+                    self.output.print(" " * (next_pos - pos))
+                    # print(" " * (next_pos - pos), end = "")
                     pos = next_pos
             else:
                 res = expr.visit()
@@ -271,22 +271,28 @@ class PrintStatement(AST):
                 else:
                     s = res
                 pos += len(str(s))
-                print(s, end = "")
+                self.output.print(s)
+                # print(s, end = "")
         if not(isinstance(expr, Token) and expr.type == COMMA):
-            print("")
+            self.output.println()
+            # print("")
 
     def __str__(self):
         return "PRINT {}".format(self.expr_list)
 
 
 class InputStatement(AST):
-    def __init__(self, var_list, vars):
+    def __init__(self, input, output, var_list, vars):
+        self.input = input
+        self.output = output
         self.var_list = var_list
         self.vars = vars
 
     def visit(self):
         for var in self.var_list:
-            value = input("?")
+            self.output.print('?')
+            value = self.input.readln()
+            # value = input("?")
             try:                
                 self.vars[var.name] = int(value)
             except:
@@ -444,9 +450,7 @@ class BinOp(AST):
         
     def visit(self):
         if self.op.type == PLUS:
-            left = self.left.visit()
-            right = self.right.visit()
-            return left + right
+            return self.left.visit() + self.right.visit()
         elif self.op.type == MINUS:
             return self.left.visit() - self.right.visit()
         elif self.op.type == MUL:
@@ -472,7 +476,9 @@ class BinOp(AST):
 
 class Parser(object):
 
-    def __init__(self, line_number, line, vars, stack):
+    def __init__(self, input, output, line_number, line, vars, stack):
+        self.input = input
+        self.output = output
         self.line_number = line_number
         self.line = line
         self.vars = vars
@@ -591,11 +597,11 @@ class Parser(object):
 
     def parse_PRINT(self):
         self.eat(PRINT)
-        return PrintStatement(self.parse_expr_list())
+        return PrintStatement(self.output, self.parse_expr_list())
 
     def parse_INPUT(self):
         self.eat(INPUT)
-        return InputStatement(self.parse_var_list(), self.vars)
+        return InputStatement(self.input, self.output, self.parse_var_list(), self.vars)
 
     def parse_IF(self):
         self.eat(IF)
@@ -648,7 +654,9 @@ class Parser(object):
 
 class TinyBasic(object):
 
-    def __init__(self, vars, stack, line_number, raw_lines):
+    def __init__(self, input, output, vars, stack, line_number, raw_lines):
+        self.input = input
+        self.output = output
         self.vars = vars
         self.stack = stack
         self.line_number = line_number
@@ -672,7 +680,7 @@ class TinyBasic(object):
         raw_sub_line = tokens[1]
         if not raw_sub_line: raise Exception("empty line")
         tokens = self.tokenize(raw_sub_line)
-        parser = Parser(line_number, tokens, self.vars, self.stack)
+        parser = Parser(self.input, self.output, line_number, tokens, self.vars, self.stack)
         node = parser.parse_statement()
         self.memory[line_number] = node
 
@@ -711,10 +719,10 @@ class TinyBasic(object):
             lines_numbers = sorted(self.memory.keys())
             for line_number in lines_numbers:
                 statement = self.memory[line_number]                
-                print("{} {}".format(line_number, statement))
+                self.output.println("{} {}".format(line_number, statement))
         elif command == RUN: self.run()
         elif command == CLEAR: self.memory.clear()
-        print("OK")
+        self.output.println("OK")
 
     def repl(self):
         import sys
@@ -729,11 +737,36 @@ class TinyBasic(object):
                     if tokens[0].type in IMMEDIATE_KEYWORDS:
                         self.execute_immediate(tokens[0].type)
                     else:
-                        parser = Parser(0, tokens, self.vars, self.stack)
+                        parser = Parser(self.input, self.output, 0, tokens, self.vars, self.stack)
                         node = parser.parse_statement()
                         node.visit()
             except Exception as e:
-                print("ERROR: {}, {}".format(raw_line, e))
+                self.output.println("ERROR: {}, {}".format(raw_line, e))
+
+class Input(object):
+    def read():
+        pass
+
+class FileInput(Input):
+    def __init__(self, file):
+        self.file = file
+    def readln(self):
+        return self.file.readline().strip()
+
+class Output(object):
+    def print(self, msg):
+        pass
+    def println(self, msg):
+        pass
+
+class FileOutput(Output):
+    def __init__(self, file):
+        self.file = file
+    def print(self, msg):
+        self.file.write(msg)
+        self.file.flush()
+    def println(self, msg = ""):
+        self.file.write(msg + '\n')
 
 def export_state(vars, stack, line_number, raw_lines):
     export = { "vars" : vars, "stack": stack, "line": line_number, "prog": raw_lines }
@@ -748,15 +781,16 @@ def load_file(filename):
 
 def run(filename):
     raw_lines = load_file(filename)
-    tiny_basic = TinyBasic({}, [], 0, raw_lines)
+    tiny_basic = TinyBasic(FileInput(sys.stdin), FileOutput(sys.stdout), {}, [], 0, raw_lines)
     try:
         tiny_basic.parse_all()
         tiny_basic.run()
     except Exception as e:
         print("ERROR: {}".format(e))
+        raise e
 
 def repl():
-    tiny_basic = TinyBasic({}, [], 0, None)
+    tiny_basic = TinyBasic(FileInput(sys.stdin), FileOutput(sys.stdout), {}, [], 0, None)
     tiny_basic.repl()
 
 def main(argv):
