@@ -4,6 +4,7 @@ import string
 import math
 import random
 import json
+import sys
 
 ANY = 'any'
 REM = 'REM'
@@ -29,6 +30,7 @@ ABS = 'ABS'
 LIST = 'LIST'
 RUN = 'RUN'
 CLEAR = 'CLEAR'
+FREEZE = 'FREEZE'
 STRING = 'STRING'
 NUMBER = 'NUMBER'
 FLOAT = 'FLOAT'
@@ -53,7 +55,8 @@ class Token(object):
         self.value = value
 
     def __str__(self):
-        return 'Token({}, {})'.format(self.type, repr(self.value))
+        # return 'Token({}, {})'.format(self.type, repr(self.value))
+        return self.value
 
     def __repr__(self):
         return self.__str__()
@@ -77,13 +80,15 @@ LANGUAGE_KEYWORDS = {
     END:    Token(END),
     LIST:   Token(LIST),
     RUN:    Token(RUN),
-    CLEAR:  Token(CLEAR)
+    CLEAR:  Token(CLEAR),
+    FREEZE: Token(FREEZE)
 }
 
 IMMEDIATE_KEYWORDS = {
     LIST,
     RUN,
-    CLEAR
+    CLEAR,
+    FREEZE
 }
 
 
@@ -215,7 +220,7 @@ class Lexer(object):
                 self.advance()
                 token = Token(RPAREN, ')')
             else:
-                raise Exception("Invalid character: {}".format(self.current_char))
+                raise Exception(f"Invalid character: {self.current_char}")
 
             if token != None:
                 self.skip_whitespace()
@@ -240,7 +245,7 @@ class LetStatement(AST):
         self.vars[self.var.name] = self.expr.visit()        
 
     def __str__(self):
-        return "LET {} = {}".format(self.var, self.expr)
+        return f"LET {self.var} = {self.expr}"
 
 
 class PrintStatement(AST):
@@ -253,16 +258,14 @@ class PrintStatement(AST):
         for expr in self.expr_list:      
             if isinstance(expr, Token):
                 if expr.type == SEMICOLON:
-                    self.output.print(" ")
-                    # print(" ", end = "")
+                    self.output.write(" ")
                     pos += 1
                 elif expr.type == COMMA:
                     pass
             elif isinstance(expr, Tab):
                 next_pos = int(expr.visit())
                 if next_pos > pos:
-                    self.output.print(" " * (next_pos - pos))
-                    # print(" " * (next_pos - pos), end = "")
+                    self.output.write(" " * (next_pos - pos))
                     pos = next_pos
             else:
                 res = expr.visit()
@@ -271,14 +274,16 @@ class PrintStatement(AST):
                 else:
                     s = res
                 pos += len(str(s))
-                self.output.print(s)
-                # print(s, end = "")
+                self.output.write(str(s))
         if not(isinstance(expr, Token) and expr.type == COMMA):
-            self.output.println()
-            # print("")
+            self.output.write("\n")            
+        self.output.flush()
 
     def __str__(self):
-        return "PRINT {}".format(self.expr_list)
+        s = ''
+        for e in self.expr_list:
+            s += str(e)
+        return "PRINT {}".format(s)
 
 
 class InputStatement(AST):
@@ -290,16 +295,18 @@ class InputStatement(AST):
 
     def visit(self):
         for var in self.var_list:
-            self.output.print('?')
-            value = self.input.readln()
-            # value = input("?")
+            self.output.write("?")
+            self.output.flush()
+            value = self.input.readline()
+            if value == '':
+                raise EOFError("no input")
             try:                
-                self.vars[var.name] = int(value)
+                self.vars[var.name] = int(value.strip())
             except:
-                raise Exception("not an int: {}".format(value))
+                raise Exception(f"not an int: {value}")
 
     def __str__(self):
-        return "INPUT {}".format(self.var_list)
+        return f"INPUT {self.var_list}"
 
 
 class IfStatement(AST):
@@ -313,7 +320,7 @@ class IfStatement(AST):
             return self.then_statement.visit()
 
     def __str__(self):
-        return "IF " + str(self.bool_expr) + " THEN " + str(self.then_statement)
+        return f"IF {self.bool_expr} THEN {self.then_statement}"
 
 
 class GotoStatement(AST):
@@ -324,7 +331,7 @@ class GotoStatement(AST):
         return self.expr.visit()
 
     def __str__(self):
-        return "GOTO {}".format(self.expr)
+        return f"GOTO {self.expr}"
 
 
 class GosubStatement(AST):
@@ -338,7 +345,7 @@ class GosubStatement(AST):
         return self.expr.visit()
 
     def __str__(self):
-        return "GOSUB {}".format(self.expr)
+        return f"GOSUB {self.expr}"
 
 
 class ReturnStatement(AST):
@@ -376,7 +383,7 @@ class Var(AST):
         return self.vars.get(self.name, 0)
 
     def __str__(self):
-        return "Var " + self.name
+        return self.name
 
 
 class Num(AST):
@@ -398,7 +405,7 @@ class String(AST):
         return self.value
 
     def __str__(self):
-        return self.value
+        return f'"{self.value}"'
 
 
 class Tab(AST):
@@ -409,7 +416,7 @@ class Tab(AST):
         return self.expr.visit()
 
     def __str__(self):
-        return "TAB({})".format(str(self.expr))
+        return f"TAB({str(self.expr)})"
 
 
 class Function(AST):
@@ -423,10 +430,10 @@ class Function(AST):
         elif self.name == INT: return int(value)
         elif self.name == RND: return random.random()
         elif self.name == ABS: return abs(value)
-        else: raise Exception("unknow function {}".format(self.name))
+        else: raise Exception(f"unknow function {self.name}")
 
     def __str__(self):
-        return "FUNC {} ( {} )".format(self.name, str(self.expr))
+        return f"{self.name}({str(self.expr)})"
 
 
 class UnOp(AST):
@@ -439,7 +446,8 @@ class UnOp(AST):
         elif self.op.type == MINUS: return -self.factor.visit()
     
     def __str__(self):
-        return "UnOp {} {}".format(self.op, self.factor)
+        # return "UnOp {} {}".format(self.op, self.factor)
+        return f"{self.op.type}{self.factor}"
 
 
 class BinOp(AST):
@@ -471,7 +479,8 @@ class BinOp(AST):
             return self.left.visit() >= self.right.visit()
 
     def __str__(self):
-        return "(BinOp " + str(self.left) + " " +  self.op.value + " " + str(self.right) + ")";
+        # return "(BinOp " + str(self.left) + " " +  self.op.value + " " + str(self.right) + ")";
+        return f"{str(self.left)} {self.op.value} {str(self.right)}"
 
 
 class Parser(object):
@@ -495,15 +504,15 @@ class Parser(object):
             else:
                 self.current_token = EOLT
         else:
-            raise Exception("expected {} but got {}".format(type, self.current_token.type))
+            raise Exception(f"expected {type} but got {self.current_token.type}")
 
     def parse_var(self):
         name = self.current_token.value
         self.eat(ID)
         if len(name) > 1:
-            raise Exception("length of variable names must be 1: {}".format(name))
+            raise Exception(f"length of variable names must be 1: {name}")
         elif name not in string.ascii_uppercase:
-            raise Exception("variable name {} not allowed".format(name))
+            raise Exception(f"variable name {name} not allowed")
         return Var(name, self.vars)
 
     def parse_function(self):
@@ -522,7 +531,7 @@ class Parser(object):
         elif token.type == MINUS:
             self.eat(MINUS)
             return UnOp(token, self.parse_factor()) 
-        elif token.type == NUMBER: # TODO needed?
+        elif token.type == NUMBER:
             self.eat(NUMBER)            
             return Num(token)
         elif token.type == ID:
@@ -534,7 +543,7 @@ class Parser(object):
             node = self.parse_expr()
             self.eat(RPAREN)
             return node
-        raise Exception("parsing factor failed: {}".format(token))
+        raise Exception(f"parsing factor failed: {token}")
 
     def parse_term(self):        
         node = self.parse_factor()
@@ -610,7 +619,7 @@ class Parser(object):
         if token.type in (LT, GT, LTE, GTE, EQUALS, NEQUALS):
             self.eat(ANY)
         else:
-            self.error("relational operator expected: {}".format(token.value))
+            self.error(f"relational operator expected: {token.value}")
         right = self.parse_expr()
         self.eat(THEN)
         statement = self.parse_statement()
@@ -649,7 +658,7 @@ class Parser(object):
         elif type == RETURN: return self.parse_RETURN()
         elif type == END:    return self.parse_END()   
         elif type == REM:    return self.parse_REM()         
-        else: raise Exception("parsing: {}".format(self.current_token))
+        else: raise Exception(f"parsing: {self.current_token}")
         
 
 class TinyBasic(object):
@@ -690,7 +699,7 @@ class TinyBasic(object):
             try:
                 self.parse_line(raw_line)
             except Exception as e:
-                raise Exception("{}, {}".format(raw_line, e))
+                raise Exception(f"{raw_line}, {e}")
 
     def get_next_line_number(self, line_number, line_numbers, current_index):
         if line_number == None:                    # just use next line
@@ -708,7 +717,7 @@ class TinyBasic(object):
         self.line_number = self.line_numbers[0]
         while True:
             if self.line_number not in self.memory:
-                raise Exception("{}, line number not found".format(statement))
+                raise Exception(f"{statement}, line number not found")
             statement = self.memory[self.line_number]
             result = statement.visit()
             self.line_number = self.get_next_line_number(result, self.line_numbers, self.line_number)
@@ -719,14 +728,15 @@ class TinyBasic(object):
             lines_numbers = sorted(self.memory.keys())
             for line_number in lines_numbers:
                 statement = self.memory[line_number]                
-                self.output.println("{} {}".format(line_number, statement))
+                self.output.write(f"{line_number} {statement}\n")
         elif command == RUN: self.run()
         elif command == CLEAR: self.memory.clear()
-        self.output.println("OK")
+        elif command == FREEZE: self.export_state()
+        self.output.write("OK\n")
 
     def repl(self):
         import sys
-        for raw_line in sys.stdin:
+        for raw_line in self.input:
             try:
                 raw_line = raw_line.strip()
                 if not raw_line: continue
@@ -740,65 +750,69 @@ class TinyBasic(object):
                         parser = Parser(self.input, self.output, 0, tokens, self.vars, self.stack)
                         node = parser.parse_statement()
                         node.visit()
+                        self.output.write("OK\n")
             except Exception as e:
-                self.output.println("ERROR: {}, {}".format(raw_line, e))
+                print(f"ERROR: {raw_line}, {e}", file=sys.stderr)
 
-class Input(object):
-    def read():
+    def export_state(self, filename):
+        raw_lines = []
+        lines_numbers = sorted(self.memory.keys())
+        for line_number in lines_numbers:
+            statement = self.memory[line_number]
+            raw_lines.append(f"{line_number} {statement}\n")
+        export = { "vars" : self.vars, "stack": self.stack, "line": self.line_number, "prog": raw_lines }
+        export_json = json.dumps(export)
+        with open(filename, 'w') as file:
+            file.write(export_json)
+
+
+def run(source_filename, input_filename=None, in_state_filename=None, out_state_filename = None):
+    print(f"run source: {source_filename}, input: {input_filename}, in state: {in_state_filename}, out state: {out_state_filename}")
+    input_file = open(input_filename, 'r') if input_filename else sys.stdin
+    if in_state_filename:
         pass
-
-class FileInput(Input):
-    def __init__(self, file):
-        self.file = file
-    def readln(self):
-        return self.file.readline().strip()
-
-class Output(object):
-    def print(self, msg):
-        pass
-    def println(self, msg):
-        pass
-
-class FileOutput(Output):
-    def __init__(self, file):
-        self.file = file
-    def print(self, msg):
-        self.file.write(msg)
-        self.file.flush()
-    def println(self, msg = ""):
-        self.file.write(msg + '\n')
-
-def export_state(vars, stack, line_number, raw_lines):
-    export = { "vars" : vars, "stack": stack, "line": line_number, "prog": raw_lines }
-    export_json = json.dumps(export)
-    print("export: {}".format(export_json))
-
-def load_file(filename):
-    file = open(filename, 'r')
-    raw_lines = file.readlines()
-    file.close()
-    return raw_lines
-
-def run(filename):
-    raw_lines = load_file(filename)
-    tiny_basic = TinyBasic(FileInput(sys.stdin), FileOutput(sys.stdout), {}, [], 0, raw_lines)
+    elif source_filename:
+        with open(source_filename, 'r') as file:
+            raw_lines = file.readlines()
+        tiny_basic = TinyBasic(input_file, sys.stdout, {}, [], 0, raw_lines)
     try:
         tiny_basic.parse_all()
         tiny_basic.run()
+    except EOFError: # not enough input, so we stop here for now
+        tiny_basic.export_state(out_state_filename)
     except Exception as e:
-        print("ERROR: {}".format(e))
-        raise e
+        print("ERROR: {}".format(e), file=sys.stderr)
 
 def repl():
-    tiny_basic = TinyBasic(FileInput(sys.stdin), FileOutput(sys.stdout), {}, [], 0, None)
+    tiny_basic = TinyBasic(sys.stdin, sys.stdout, {}, [], 0, None)
     tiny_basic.repl()
 
 def main(argv):
     print("Tiny Basic v0.1")
-    if len(argv) > 0:
-        run(argv[0])
-    else:
+    # "tb"                             --> repl mode, interactive
+    # "tb sample.bas"                  --> run sample.bas
+    # "tb -input input.txt sample.bas" --> run sample.bas and use input.txt as input
+    # "tb -state state.json"           --> run from saved state
+    source_file = None
+    input_file = None
+    in_state_file = None
+    out_state_file = None
+    while argv:
+        arg = argv.pop(0)
+        if arg == "-input":
+            input_file = argv.pop(0)
+        elif arg == "-in_state":
+            in_state_file = argv.pop(0)
+        elif arg == "-out_state":
+            out_state_file = argv.pop(0)
+        else:
+            if source_file == None: source_file = arg
+            else: raise Exception(f"don't know how to handle {arg}")
+
+    if not source_file and not in_state_file:
         repl()
+    else:
+        run(source_file, input_file, in_state_file, out_state_file)
 
 if __name__ == '__main__':
     import sys
