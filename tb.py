@@ -3,7 +3,6 @@
 import string
 import math
 import random
-import json
 import sys
 
 ANY = 'any'
@@ -303,7 +302,10 @@ class InputStatement(AST):
                 raise Exception(f"not an int: {value}")
 
     def __str__(self):
-        return f"INPUT {self.var_list}"
+        s = ''
+        for v in self.var_list:
+            s += v.name + ','
+        return f"INPUT {s[:-1]}"
 
 
 class IfStatement(AST):
@@ -750,17 +752,6 @@ class TinyBasic(object):
             except Exception as e:
                 print(f"ERROR: {raw_line}, {e}", file=sys.stderr)
 
-    def export_state(self, filename):
-        raw_lines = []
-        lines_numbers = sorted(self.memory.keys())
-        for line_number in lines_numbers:
-            statement = self.memory[line_number]
-            raw_lines.append(f"{line_number} {statement}\n")
-        export = { "vars" : self.vars, "stack": self.stack, "line": self.line_number, "prog": raw_lines }
-        export_json = json.dumps(export)
-        with open(filename, 'w') as file:
-            file.write(export_json)
-
 
 def run(source_filename):
     with open(source_filename, 'r') as file:
@@ -770,7 +761,7 @@ def run(source_filename):
         tiny_basic.parse_all()
         tiny_basic.run()
     except Exception as e:
-        print("ERROR: {}".format(e), file=sys.stderr)
+        print(f"ERROR: {e}", file=sys.stderr)
 
 def repl():
     tiny_basic = TinyBasic(sys.stdin, sys.stdout, {}, [], 0, None)
