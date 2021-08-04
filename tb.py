@@ -3,7 +3,6 @@
 import string
 import math
 import random
-import sys
 
 ANY = 'any'
 REM = 'REM'
@@ -54,7 +53,7 @@ class Token(object):
 
     def __str__(self):
         # return 'Token({}, {})'.format(self.type, repr(self.value))
-        return self.value
+        return self.value if self.value else self.type
 
     def __repr__(self):
         return self.__str__()
@@ -75,10 +74,10 @@ LANGUAGE_KEYWORDS = {
     INT:    Token(INT),
     RND:    Token(RND),
     ABS:    Token(ABS),
-    END:    Token(END),
-    LIST:   Token(LIST),
-    RUN:    Token(RUN),
-    CLEAR:  Token(CLEAR)
+    END:    Token(END)
+#    LIST:   Token(LIST),
+#    RUN:    Token(RUN),
+#    CLEAR:  Token(CLEAR)
 }
 
 IMMEDIATE_KEYWORDS = {
@@ -733,7 +732,6 @@ class TinyBasic(object):
         self.output.write("OK\n")
 
     def repl(self):
-        import sys
         for raw_line in self.input:
             try:
                 raw_line = raw_line.strip()
@@ -742,8 +740,8 @@ class TinyBasic(object):
                     self.parse_line(raw_line)
                 else:
                     tokens = self.tokenize(raw_line)
-                    if tokens[0].type in IMMEDIATE_KEYWORDS:
-                        self.execute_immediate(tokens[0].type)
+                    if tokens[0].value.upper() in IMMEDIATE_KEYWORDS:
+                        self.execute_immediate(tokens[0].value.upper())
                     else:
                         parser = Parser(self.input, self.output, 0, tokens, self.vars, self.stack)
                         node = parser.parse_statement()
@@ -751,6 +749,7 @@ class TinyBasic(object):
                         self.output.write("OK\n")
             except Exception as e:
                 print(f"ERROR: {raw_line}, {e}", file=sys.stderr)
+                raise e
 
 
 def run(source_filename):
