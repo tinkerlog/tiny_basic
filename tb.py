@@ -52,8 +52,7 @@ class Token(object):
         self.value = value
 
     def __str__(self):
-        # return 'Token({}, {})'.format(self.type, repr(self.value))
-        return self.value if self.value else self.type
+        return str(self.value) if self.value else self.type
 
     def __repr__(self):
         return self.__str__()
@@ -150,6 +149,7 @@ class Lexer(object):
         while self.current_char is not None and self.current_char != '"':
             result += self.current_char
             self.advance()
+        if self.current_char is None: raise Exception("missing closing \"")
         self.advance()
         token = Token(STRING, result)
         return token
@@ -585,6 +585,7 @@ class Parser(object):
             if self.current_token == EOLT:
                 break
             expr_list.append(self.parse_expr_or_string())
+        if self.current_token != EOLT: raise Exception(f"unexpected: {self.current_token}")
         return expr_list
 
     def parse_var_list(self):
@@ -593,6 +594,7 @@ class Parser(object):
         while self.current_token.type == COMMA:
             self.eat(COMMA)
             var_list.append(self.parse_var())
+        if self.current_token != EOLT: raise Exception(f"unexpected: {self.current_token}")        
         return var_list
 
     def parse_LET(self):
@@ -713,6 +715,7 @@ class TinyBasic(object):
         if len(self.memory) == 0: raise Exception("nothing to run")
         self.line_numbers = sorted(self.memory.keys())
         self.line_number = self.line_numbers[0]
+        executed = 0
         while True:
             if self.line_number not in self.memory:
                 raise Exception(f"{statement}, line number not found")
@@ -720,6 +723,9 @@ class TinyBasic(object):
             result = statement.visit()
             self.line_number = self.get_next_line_number(result, self.line_numbers, self.line_number)
             if self.line_number == None: break
+            executed += 1
+            if executed >= 1000:
+                raise Exception(f"cycles exceeded.")
 
     def execute_immediate(self, command):
         if command == LIST:
@@ -740,8 +746,10 @@ class TinyBasic(object):
                     self.parse_line(raw_line)
                 else:
                     tokens = self.tokenize(raw_line)
-                    if tokens[0].value.upper() in IMMEDIATE_KEYWORDS:
-                        self.execute_immediate(tokens[0].value.upper())
+                    print(f"tokens: {tokens}")
+                    token = tokens[0].value if tokens[0].value != None else tokens[0].type
+                    if token.upper() in IMMEDIATE_KEYWORDS:
+                        self.execute_immediate(token.upper())
                     else:
                         parser = Parser(self.input, self.output, 0, tokens, self.vars, self.stack)
                         node = parser.parse_statement()
@@ -749,8 +757,7 @@ class TinyBasic(object):
                         self.output.write("OK\n")
             except Exception as e:
                 print(f"ERROR: {raw_line}, {e}", file=sys.stderr)
-                raise e
-
+                # raise e
 
 def run(source_filename):
     with open(source_filename, 'r') as file:
@@ -761,6 +768,10 @@ def run(source_filename):
         tiny_basic.run()
     except Exception as e:
         print(f"ERROR: {e}", file=sys.stderr)
+
+# TODO
+# print "A"+1
+
 
 def repl():
     tiny_basic = TinyBasic(sys.stdin, sys.stdout, {}, [], 0, None)
