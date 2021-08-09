@@ -602,11 +602,14 @@ class Parser(object):
         var = self.parse_var()
         self.eat(EQUALS)
         expr = self.parse_expr()
+        if self.current_token != EOLT: raise Exception(f"unexpected: {self.current_token}")        
         return LetStatement(var, expr, self.vars)
 
     def parse_PRINT(self):
         self.eat(PRINT)
-        return PrintStatement(self.output, self.parse_expr_list())
+        expr_list = self.parse_expr_list()
+        if self.current_token != EOLT: raise Exception(f"unexpected: {self.current_token}")        
+        return PrintStatement(self.output, expr_list)
 
     def parse_INPUT(self):
         self.eat(INPUT)
@@ -623,6 +626,7 @@ class Parser(object):
         right = self.parse_expr()
         self.eat(THEN)
         statement = self.parse_statement()
+        if self.current_token != EOLT: raise Exception(f"unexpected: {self.current_token}")        
         condition = BinOp(left, token, right)
         return IfStatement(condition, statement)
 
