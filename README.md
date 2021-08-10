@@ -44,12 +44,31 @@ Another option is to use stdin in repl mode.
 ```
 tb.py < input_file
 ```
-If you are using this option, don't forget to include a `RUN` statement at the end. Otherwise it would just load the program into memory and then exit.
+If you are using this option, don't forget to include a `RUN` statement at the end. Otherwise it would just load the program into memory and then exit. You can/should include keyboard input as well.
+This may be the contents of an input file:
+```
+10 PRINT "Factorial"
+20 PRINT "Enter an integer: ",
+30 LET F = 1
+40 INPUT N
+50 IF N = 0 THEN GOTO 90
+60 LET F = F * N
+70 LET N = N - 1
+80 GOTO 50
+90 PRINT F
+RUN
+5
+```
+
 
 ## Twitter bot
 
 There is  a twitter bot, that reads tweets, addressed to it, and then replies with the output of the statement or program.
 
+* The whole program has to fit into a single tweet (even 280 chars is enough for tiny programs). There is nothing, that survives the execution. The next tweet will find an empty memory.
+* Output is limited. It will get truncated at 260 chars.
+* Execution is limited. Execution will stop after 1000 statements and return an error.
+* Retweets will be ignored.
 
 ## Statements
 
