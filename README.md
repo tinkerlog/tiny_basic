@@ -104,6 +104,10 @@ Special formatting for the PRINT statement is possible.
 * a trailing `,` omits the CR at the end and makes it possible to have the 
 input `?` on the same line
 
+## Bugs
+
+I'm sure there are lot.
+If you find any, please report them here https://github.com/tinkerlog/tiny_basic/issues
 
 
 ## Grammar
@@ -178,3 +182,4 @@ string ::=
 	" ( |!|#|$ ... -|.|/|digit|: ... |A| ... |Z)* "
 ```
 
+## Have fun.
