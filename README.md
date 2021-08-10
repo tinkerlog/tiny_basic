@@ -84,10 +84,12 @@ RUN
 
 ## Twitter bot
 
-There is  a twitter bot, that reads tweets, addressed to it, and then replies with the output of the statement or program.
+There is  a twitter bot, based on this interpreter, that reads tweets, addressed to it, and then replies with the output of the statement or program.
+Take a look at http://twitter.com/TinyBasicBot
+
 
 * The whole program has to fit into a single tweet (even 280 chars is enough for tiny programs). There is nothing, that survives the execution. The next tweet will find an empty memory.
-* Output is limited. It will get truncated at 260 chars.
+* Output is limited. It will get truncated at 260 chars. You can not use '@' in the output.
 * Execution is limited. Execution will stop after 1000 statements and return an error.
 * Retweets will be ignored.
 
@@ -173,7 +175,4 @@ relop ::=
 string ::= 
 	" ( |!|#|$ ... -|.|/|digit|: ... |A| ... |Z)* "
 ```
-
-
-
 
