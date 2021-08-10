@@ -632,18 +632,24 @@ class Parser(object):
 
     def parse_GOTO(self):
         self.eat(GOTO)
-        return GotoStatement(self.parse_expr())
+        expr = self.parse_expr()
+        if self.current_token != EOLT: raise Exception(f"unexpected: {self.current_token}")        
+        return GotoStatement(expr)
 
     def parse_GOSUB(self):
         self.eat(GOSUB)
-        return GosubStatement(self.parse_expr(), self.line_number, self.stack)
+        expr = self.parse_expr()
+        if self.current_token != EOLT: raise Exception(f"unexpected: {self.current_token}")        
+        return GosubStatement(expr, self.line_number, self.stack)
 
     def parse_RETURN(self):
         self.eat(RETURN)
+        if self.current_token != EOLT: raise Exception(f"unexpected: {self.current_token}")        
         return ReturnStatement(self.stack)
 
     def parse_END(self):
         self.eat(END)
+        if self.current_token != EOLT: raise Exception(f"unexpected: {self.current_token}")        
         return EndStatement()
 
     def parse_REM(self):
@@ -750,7 +756,7 @@ class TinyBasic(object):
                     self.parse_line(raw_line)
                 else:
                     tokens = self.tokenize(raw_line)
-                    print(f"tokens: {tokens}")
+                    # print(f"tokens: {tokens}")
                     token = tokens[0].value if tokens[0].value != None else tokens[0].type
                     if token.upper() in IMMEDIATE_KEYWORDS:
                         self.execute_immediate(token.upper())
@@ -772,9 +778,6 @@ def run(source_filename):
         tiny_basic.run()
     except Exception as e:
         print(f"ERROR: {e}", file=sys.stderr)
-
-# TODO
-# print "A"+1
 
 
 def repl():
