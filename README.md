@@ -19,6 +19,8 @@ This version of Tiny Basic differs from its initial specification:
 
 The interpreter has no real purpose except amusement. 
 
+## Running
+
 You run it like so:
 `tb.py <filename>`
 or without parameter to run it in repl mode.
@@ -37,6 +39,19 @@ A simple program to compute sine:
 100 PRINT "SIN=",S
 110 END
 ```
+
+Another option is to use stdin in repl mode.
+```
+tb.py < input_file
+```
+If you are using this option, don't forget to include a `RUN` statement at the end. Otherwise it would just load the program into memory and then exit.
+
+## Twitter bot
+
+There is  a twitter bot, that reads tweets, addressed to it, and then replies with the output of the statement or program.
+
+
+## Statements
 
 Special formatting for the PRINT statement is possible.
 * Separating expressions by `,` prints without any space
@@ -116,7 +131,7 @@ relop ::=
 	'<' | '=' | '>' | '<=' | '>=' | '<>'
 
 string ::= 
-	" ( |!|#|$ ... -|.|/|digit|: ... @|A|B|C ... |X|Y|Z)* "
+	" ( |!|#|$ ... -|.|/|digit|: ... |A| ... |Z)* "
 ```
 
 
