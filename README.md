@@ -40,7 +40,28 @@ A simple program to compute sine:
 110 END
 ```
 
-Another option is to use stdin in repl mode.
+In repl mode you can ommit the line numbers. If you do, the statement will be executed directly. If you enter a statement including a line number, it will be stored in memory.
+```
+./tb.py 
+Tiny Basic v0.1
+LET A=5
+OK
+10 PRINT A
+20 IF A = 0 THEN GOTO 100
+30 LET A = A-1
+40 GOTO 10
+100 END
+RUN
+5
+4
+3
+2
+1
+0
+OK
+```
+
+Another option is to use stdin with a file in repl mode.
 ```
 tb.py < input_file
 ```
