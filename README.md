@@ -93,6 +93,8 @@ Take a look at http://twitter.com/TinyBasicBot
 * Execution is limited. Execution will stop after 1000 statements and return an error.
 * Retweets will be ignored.
 
+![screenshot](./screenshots/twitter01.png)
+
 ## Statements
 
 Special formatting for the PRINT statement is possible.
