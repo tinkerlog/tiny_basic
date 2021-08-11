@@ -93,6 +93,7 @@ Take a look at http://twitter.com/TinyBasicBot
 * Execution is limited. Execution will stop after 1000 statements and return an error.
 * Retweets will be ignored.
 * Tweets mentioning the TinyBasicBot in the middle of the message, like `Hello @TinyBasicBot`, will be ignored.
+* Tweets mentioning other users than @TinyBasicBot will be ignored.
 * Tweets currently take up to 5 minutes to process.
 
 ![screenshot](./screenshots/twitter01.png)
