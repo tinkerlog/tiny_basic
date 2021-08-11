@@ -94,7 +94,7 @@ Take a look at http://twitter.com/TinyBasicBot
 * Retweets will be ignored.
 * Tweets mentioning the TinyBasicBot in the middle of the message, like `Hello @TinyBasicBot`, will be ignored.
 * Tweets mentioning other users than @TinyBasicBot will be ignored.
-* Tweets currently take up to 5 minutes to process.
+* Tweets currently take up to two minutes to process.
 
 ![screenshot](./screenshots/twitter01.png)
 
