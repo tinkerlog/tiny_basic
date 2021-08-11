@@ -3,7 +3,6 @@
 import string
 import math
 import random
-import sys
 
 ANY = 'any'
 REM = 'REM'
@@ -674,9 +673,10 @@ class Parser(object):
 
 class TinyBasic(object):
 
-    def __init__(self, input, output, vars, stack, line_number, raw_lines):
+    def __init__(self, input, output, error, vars, stack, line_number, raw_lines):
         self.input = input
         self.output = output
+        self.error = error
         self.vars = vars
         self.stack = stack
         self.line_number = line_number
@@ -767,13 +767,13 @@ class TinyBasic(object):
                         node.visit()
                         self.output.write("OK\n")
             except Exception as e:
-                print(f"ERROR: {raw_line}, {e}", file=sys.stderr)
+                print(f"ERROR: {raw_line}, {e}", file=self.error)
                 # raise e
 
 def run(source_filename):
     with open(source_filename, 'r') as file:
         raw_lines = file.readlines()
-    tiny_basic = TinyBasic(sys.stdin, sys.stdout, {}, [], 0, raw_lines)
+    tiny_basic = TinyBasic(sys.stdin, sys.stdout, sys.stderr, {}, [], 0, raw_lines)
     try:
         tiny_basic.parse_all()
         tiny_basic.run()
@@ -782,7 +782,7 @@ def run(source_filename):
 
 
 def repl():
-    tiny_basic = TinyBasic(sys.stdin, sys.stdout, {}, [], 0, None)
+    tiny_basic = TinyBasic(sys.stdin, sys.stdout, sys.stderr, {}, [], 0, None)
     tiny_basic.repl()
 
 def main(argv):
