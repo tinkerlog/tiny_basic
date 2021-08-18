@@ -1,6 +1,6 @@
 # Tiny Basic
 
-This is a Tiny Basic interpreter written in Python.
+This is a Tiny Basic interpreter written in Python (I'm still learning Python).
 
 To find out more about Tiny Basic, check https://en.wikipedia.org/wiki/Tiny_BASIC
 
