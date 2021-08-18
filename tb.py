@@ -44,6 +44,7 @@ LPAREN = '('
 RPAREN = ')'
 EOL = 'EOL'
 
+MAX_CYCLES = 10000
 
 class Token(object):
 
@@ -735,7 +736,7 @@ class TinyBasic(object):
             self.line_number = self.get_next_line_number(result, self.line_numbers, self.line_number)
             if self.line_number == None: break
             executed += 1
-            if executed >= 1000:
+            if executed >= MAX_CYCLES:
                 raise Exception(f"cycles exceeded.")
 
     def execute_immediate(self, command):
