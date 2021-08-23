@@ -1,9 +1,7 @@
-10 PRINT "Factorial"
-20 PRINT "Enter an integer: ",
-30 LET F = 1
-40 INPUT N
-50 IF N = 0 THEN GOTO 90
-60 LET F = F * N
-70 LET N = N - 1
-80 GOTO 50
-90 PRINT F
+10 LET F = 1
+20 FOR I = 1 TO 6
+30 LET F = F*I
+40 PRINT "FACTORIAL(",I,") = ",F
+50 NEXT
+60 END
+

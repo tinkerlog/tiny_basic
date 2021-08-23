@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+# based on https://ruslanspivak.com/lsbasi-part1/
+
 import string
 import math
 import random
@@ -15,10 +17,15 @@ LET = 'LET'
 GOSUB = 'GOSUB'
 RETURN = 'RETURN'
 END = 'END'
+FOR = 'FOR'
+TO = 'TO'
+STEP = 'STEP'
+NEXT = 'NEXT'
 PLUS = '+'
 MINUS = '-'
 MUL = '*'
 DIV = '/'
+MOD = 'MOD'
 ID = 'ID'
 TAB = 'TAB'
 SQR = 'SQR'
@@ -69,15 +76,17 @@ LANGUAGE_KEYWORDS = {
     LET:    Token(LET),
     GOSUB:  Token(GOSUB),
     RETURN: Token(RETURN),
+    MOD:    Token(MOD),
     TAB:    Token(TAB),
     SQR:    Token(SQR),
     INT:    Token(INT),
     RND:    Token(RND),
     ABS:    Token(ABS),
-    END:    Token(END)
-#    LIST:   Token(LIST),
-#    RUN:    Token(RUN),
-#    CLEAR:  Token(CLEAR)
+    END:    Token(END),
+    FOR:    Token(FOR),
+    TO:     Token(TO),
+    STEP:   Token(STEP),
+    NEXT:   Token(NEXT)
 }
 
 IMMEDIATE_KEYWORDS = {
@@ -358,6 +367,47 @@ class ReturnStatement(AST):
         return "RETURN"
 
 
+class ForStatement(AST):
+    def __init__(self, line_number, vars, var, from_expr, to_expr, step_expr):
+        self.line_number = line_number
+        self.vars = vars
+        self.var = var
+        self.from_expr = from_expr
+        self.to_expr = to_expr
+        self.step_expr = step_expr
+
+    def add_next(self, next_statement):
+        self.next = next_statement
+
+    def visit(self):
+        self.current_from = self.from_expr.visit()
+        self.current_to = self.to_expr.visit()
+        self.current_step = self.step_expr.visit()
+        self.vars[self.var] = self.current_from
+
+    def do_next(self):
+        self.vars[self.var] = self.vars[self.var] + self.current_step
+        v = self.vars[self.var]
+        return self.current_step > 0 and v <= self.current_to or self.current_step <= 0 and v >= self.current_to
+
+    def __str__(self):
+        return f"FOR {self.var} = {self.from_expr} TO {self.to_expr} STEP {self.step_expr}"
+
+
+class NextStatement(AST):
+    def __init__(self, line_number, for_stmt):
+        self.line_number = line_number
+        self.for_stmt = for_stmt
+
+    def visit(self):
+        if self.for_stmt.do_next():
+            return -self.for_stmt.line_number
+        return
+
+    def __str__(self):
+        return "NEXT"
+
+
 class EndStatement(AST):
     def visit(self):
         return 0
@@ -464,6 +514,8 @@ class BinOp(AST):
             return self.left.visit() * self.right.visit()
         elif self.op.type == DIV:
             return self.left.visit() / self.right.visit()
+        elif self.op.type == MOD:
+            return self.left.visit() % self.right.visit()
         elif self.op.type == EQUALS:
             return self.left.visit() == self.right.visit()
         elif self.op.type == NEQUALS:
@@ -484,13 +536,14 @@ class BinOp(AST):
 
 class Parser(object):
 
-    def __init__(self, input, output, line_number, line, vars, stack):
+    def __init__(self, input, output, line_number, line, vars, stack, for_stack):
         self.input = input
         self.output = output
         self.line_number = line_number
         self.line = line
         self.vars = vars
         self.stack = stack
+        self.for_stack = for_stack
         if len(line) == 0:
             self.current_token = None
         else:            
@@ -546,7 +599,7 @@ class Parser(object):
 
     def parse_term(self):        
         node = self.parse_factor()
-        while self.current_token.type in (MUL, DIV):
+        while self.current_token.type in (MUL, DIV, MOD):
             token = self.current_token
             self.eat(ANY)
             node = BinOp(left=node, op=token, right=self.parse_factor())
@@ -648,6 +701,32 @@ class Parser(object):
         if self.current_token != EOLT: raise Exception(f"unexpected: {self.current_token}")        
         return ReturnStatement(self.stack)
 
+    def parse_FOR(self):
+        self.eat(FOR)
+        if self.current_token.type != ID:
+            raise Exception(f"unexpected: {self.current_token}")
+        var = self.current_token.value
+        self.eat(ID)
+        self.eat(EQUALS)
+        start_expr = self.parse_expr()
+        self.eat(TO)
+        to_expr = self.parse_expr()
+        if self.current_token.type == STEP:
+            self.eat(STEP)
+            step_expr = self.parse_expr()
+        else:
+            step_expr = Num(Token(NUMBER, 1))
+        stmt = ForStatement(self.line_number, self.vars, var, start_expr, to_expr, step_expr)
+        self.for_stack.append(stmt)
+        return stmt
+
+    def parse_NEXT(self):
+        self.eat(NEXT)
+        if len(self.for_stack) == 0:
+            raise Exception("NEXT has no matching FOR")         
+        stmt = NextStatement(self.line_number, self.for_stack.pop())
+        return stmt
+
     def parse_END(self):
         self.eat(END)
         if self.current_token != EOLT: raise Exception(f"unexpected: {self.current_token}")        
@@ -667,6 +746,8 @@ class Parser(object):
         elif type == GOTO:   return self.parse_GOTO()
         elif type == GOSUB:  return self.parse_GOSUB()
         elif type == RETURN: return self.parse_RETURN()
+        elif type == FOR:    return self.parse_FOR()
+        elif type == NEXT:   return self.parse_NEXT()
         elif type == END:    return self.parse_END()   
         elif type == REM:    return self.parse_REM()         
         else: raise Exception(f"parsing: {self.current_token}")
@@ -683,6 +764,7 @@ class TinyBasic(object):
         self.line_number = line_number
         self.raw_lines = raw_lines
         self.memory = {}
+        self.for_stack = []
 
     def tokenize(self, line):
         tokens = []
@@ -701,7 +783,7 @@ class TinyBasic(object):
         raw_sub_line = tokens[1]
         if not raw_sub_line: raise Exception("empty line")
         tokens = self.tokenize(raw_sub_line)
-        parser = Parser(self.input, self.output, line_number, tokens, self.vars, self.stack)
+        parser = Parser(self.input, self.output, line_number, tokens, self.vars, self.stack, self.for_stack)
         node = parser.parse_statement()
         self.memory[line_number] = node
 

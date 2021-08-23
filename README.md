@@ -107,6 +107,16 @@ Special formatting for the PRINT statement is possible.
 * a trailing `,` omits the CR at the end and makes it possible to have the 
 input `?` on the same line
 
+The `FOR` loop can be used with or without the `STEP` parameter. If `STEP` is omitted, the step defaults to `+1`. The end of the `FOR` loop is controlled with the `NEXT` statement. It does not have the loop variable next to it. The `NEXT` statement is automatically associated with the last `FOR` statement. `FOR` loops can be nested.
+```basic
+10 FOR X = 0 TO 3 STEP 1
+20 FOR Y = 0 TO 3 STEP 1
+30 PRINT "x:",X,",y:",Y
+40 NEXT
+50 NEXT
+60 END
+```
+
 ## Bugs
 
 I'm sure there are lot.
@@ -124,6 +134,9 @@ statement ::=
 	'GOTO' expression |
 	'INPUT' var-list |
 	'LET' var '=' expression |
+	'FOR' var '=' expression 'TO' expression |
+	'FOR' var '=' expression 'TO' expression 'STEP' expression |
+	'NEXT' |
 	'GOSUB' expression |
 	'RETURN' |
 	'END' |
@@ -144,7 +157,7 @@ expression ::=
 	term (('+' | '-') term)*
  
 term ::= 
-	factor (('*' | '/') factor)*
+	factor (('*' | '/' | 'MOD') factor)*
  	
 factor ::= 
 	'+' factor |
