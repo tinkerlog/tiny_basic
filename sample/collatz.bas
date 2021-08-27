@@ -1,0 +1,10 @@
+10 PRINT "Collatz Conjecture, 3x+1, enter positive X:",
+20 INPUT X
+30 PRINT X
+40 IF X = 1 THEN GOTO 200
+50 IF X MOD 2 = 0 THEN GOTO 100
+60 LET X = INT(3 * X + 1)
+70 GOTO 30
+100 LET X = INT(X / 2)
+110 GOTO 30
+200 END

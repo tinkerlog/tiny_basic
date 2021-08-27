@@ -845,7 +845,7 @@ class TinyBasic(object):
                     if token.upper() in IMMEDIATE_KEYWORDS:
                         self.execute_immediate(token.upper())
                     else:
-                        parser = Parser(self.input, self.output, 0, tokens, self.vars, self.stack)
+                        parser = Parser(self.input, self.output, 0, tokens, self.vars, self.stack, [])
                         node = parser.parse_statement()
                         node.visit()
                         self.output.write("OK\n")
